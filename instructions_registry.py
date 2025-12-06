@@ -18,6 +18,8 @@ from instructions import en_instructions
 from instructions import ja_instructions
 from instructions import es_instructions
 from instructions import fr_instructions
+from instructions import pt_instructions
+
 
 _KEYWORD = "keywords:"
 
@@ -212,8 +214,49 @@ FR_INSTRUCTION_DICT = {
     _CONTENT + "no_digits": fr_instructions.NumbersInWords,
 }
 
+PT_INSTRUCTION_DICT = {
+    _KEYWORD + "existence": pt_instructions.KeywordChecker,
+    _KEYWORD + "frequency": pt_instructions.KeywordFrequencyChecker,
+    # TODO(jeffreyzhou): make a proper set of sentences to choose from
+    # _KEYWORD + "key_sentences": instructions.KeySentenceChecker,
+    _KEYWORD + "forbidden_words": pt_instructions.ForbiddenWords,
+    _KEYWORD + "letter_frequency": pt_instructions.LetterFrequencyChecker,
+    _LANGUAGE + "response_language": pt_instructions.ResponseLanguageChecker,
+    _LENGTH + "number_sentences": pt_instructions.NumberOfSentences,
+    _LENGTH + "number_paragraphs": pt_instructions.ParagraphChecker,
+    _LENGTH + "number_words": pt_instructions.NumberOfWords,
+    _LENGTH + "nth_paragraph_first_word": pt_instructions.ParagraphFirstWordCheck,
+    _CONTENT + "number_placeholders": pt_instructions.PlaceholderChecker,
+    _CONTENT + "postscript": pt_instructions.PostscriptChecker,
+    _FORMAT + "number_bullet_lists": pt_instructions.BulletListChecker,
+    # TODO(jeffreyzhou): Pre-create paragraph or use prompt to replace
+    # _CONTENT + "rephrase_paragraph": instructions.RephraseParagraph,
+    # _FORMAT + "constrained_response": pt_instructions.ConstrainedResponseChecker, TODO
+    _FORMAT + "number_highlighted_sections": (
+        pt_instructions.HighlightSectionChecker),
+    _FORMAT + "multiple_sections": pt_instructions.SectionChecker,
+    # TODO(tianjianlu): Re-enable rephrasing with preprocessing the message.
+    # _FORMAT + "rephrase": instructions.RephraseChecker,
+    _FORMAT + "json_format": pt_instructions.JsonFormat,
+    _FORMAT + "title": pt_instructions.TitleChecker,
+    # TODO(tianjianlu): Re-enable with specific prompts.
+    # _MULTITURN + "constrained_start": instructions.ConstrainedStartChecker,
+    _COMBINATION + "two_responses": pt_instructions.TwoResponsesChecker,
+    # _COMBINATION + "repeat_prompt": pt_instructions.RepeatPromptThenAnswer, TODO
+    _STARTEND + "end_checker": pt_instructions.EndChecker,
+    _CHANGE_CASES
+    + "capital_word_frequency": pt_instructions.CapitalWordFrequencyChecker,
+    _CHANGE_CASES
+    + "english_capital": pt_instructions.CapitalLettersPortugueseChecker,
+    _CHANGE_CASES
+    + "english_lowercase": pt_instructions.LowercaseLettersPortugueseChecker,
+    _PUNCTUATION + "no_comma": pt_instructions.CommaChecker,
+    _STARTEND + "quotation": pt_instructions.QuotationChecker,
+}
+
 INSTRUCTION_DICT = {}
 INSTRUCTION_DICT.update({"en:" + k: v for k, v in EN_INSTRUCTION_DICT.items()})
 INSTRUCTION_DICT.update({"ja:" + k: v for k, v in JA_INSTRUCTION_DICT.items()})
 INSTRUCTION_DICT.update({"fr:" + k: v for k, v in FR_INSTRUCTION_DICT.items()})
 INSTRUCTION_DICT.update({"es:" + k: v for k, v in ES_INSTRUCTION_DICT.items()})
+INSTRUCTION_DICT.update({"pt:" + k: v for k, v in PT_INSTRUCTION_DICT.items()})
