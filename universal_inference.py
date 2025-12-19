@@ -33,11 +33,11 @@ def run_model_inference(model_name):
 
     sampling_params = SamplingParams(temperature=0.0, max_tokens=2048)
 
-    # 3. Identificar arquivo de dados (Usa o CLEAN se existir, senão o normal)
+    # 3. Identificar arquivo de dados
     data_dir = "./data"
     input_file = None
 
-    # Prioridade para o arquivo limpo que geramos
+    # Prioridade para o arquivo limpo
     if os.path.exists(os.path.join(data_dir, "pt_input_data_FINAL_CLEAN.jsonl")):
         input_file = "pt_input_data_FINAL_CLEAN.jsonl"
     elif os.path.exists(os.path.join(data_dir, "pt_input_data_clean.jsonl")):
@@ -60,7 +60,6 @@ def run_model_inference(model_name):
         col_names = ds.column_names
         prompt_col = "prompt"
         if "prompt" not in col_names:
-            # Tenta achar substitutos
             for c in ["instruction", "pergunta", "input"]:
                 if c in col_names:
                     prompt_col = c; break
@@ -72,9 +71,9 @@ def run_model_inference(model_name):
         outputs = llm.generate(prompts, sampling_params)
         generated_text = [output.outputs[0].text for output in outputs]
 
-        # Salva Saída
+        # Salva Saída (SEM O _new)
         safe_model = model_name.replace('/', '__')
-        output_filename = os.path.join(data_dir, f"pt_input_response_data_{safe_model}_new.jsonl")
+        output_filename = os.path.join(data_dir, f"pt_input_response_data_{safe_model}.jsonl")
 
         ds = ds.add_column("response", generated_text)
         ds.select_columns([prompt_col, "response"]).to_json(output_filename)
