@@ -255,3 +255,73 @@ if __name__ == '__main__':
     # Executa todos os testes e mostra detalhe
     print("Iniciando execução...")
     unittest.main(verbosity=2)
+
+class TestInstructionFollowingPT(unittest.TestCase):
+
+    def test_cedilha_frequency(self):
+        print("Testando: CedilhaFrequencyChecker (PT)")
+        instruction = pt_instructions.CedilhaFrequencyChecker("test_cedilha_id")
+        
+        instruction.build_description(count=2)
+        
+        self.assertTrue(instruction.check_following("Ação e reação."))
+        self.assertFalse(instruction.check_following("Ação apenas."))
+        print("OK")
+
+    def test_no_tilde(self):
+        print("Testando: NoTildeChecker (PT)")
+        instruction = pt_instructions.NoTildeChecker("test_tilde_id")
+        instruction.build_description()
+        
+        self.assertTrue(instruction.check_following("Tudo bem com voce."))
+        self.assertFalse(instruction.check_following("Não."))
+        print("OK")
+
+    def test_crase_presence(self):
+        print("Testando: CrasePresenceChecker (PT)")
+        instruction = pt_instructions.CrasePresenceChecker("test_crase_id")
+        instruction.build_description()
+        
+        self.assertTrue(instruction.check_following("Fui à feira."))
+        self.assertFalse(instruction.check_following("Fui a feira."))
+        print("OK")
+
+    def test_mesoclise(self):
+        print("Testando: MesocliseChecker (PT)")
+        instruction = pt_instructions.MesocliseChecker("test_mesoclise_id")
+        instruction.build_description()
+        
+        self.assertTrue(instruction.check_following("Comprar-te-ei um carro."))
+        self.assertFalse(instruction.check_following("Vou te comprar."))
+        print("OK")
+
+    def test_vos_address(self):
+        print("Testando: VOSAddressChecker (PT)")
+        instruction = pt_instructions.VOSAddressChecker("test_vos_id")
+        instruction.build_description()
+        
+        self.assertTrue(instruction.check_following("Vós sabeis a verdade."))
+        self.assertFalse(instruction.check_following("Você sabe a verdade."))
+        print("OK")
+
+    def test_four_porques_grammar(self):
+        print("Testando: FourPorquesGrammarChecker (PT)")
+        instruction = pt_instructions.FourPorquesGrammarChecker("test_porques_id")
+        instruction.build_description()
+
+        texto_correto = (
+            "Por que o céu é azul? A ciência explica porque a luz se dispersa. "
+            "Eu entendo o porquê disso. Mas você sabe por quê?"
+        )
+        self.assertTrue(instruction.check_following(texto_correto), "Deveria passar com os 4 corretos")
+
+        texto_incompleto = "Por que fui? Não sei o porquê. Foi porque quis."
+        self.assertFalse(instruction.check_following(texto_incompleto), "Deveria falhar faltando um tipo")
+        
+        texto_erro_inicio = "Porque você foi? Eu fui porque quis. Eis o porquê. Sabe por quê?"
+        self.assertFalse(instruction.check_following(texto_erro_inicio), "Deveria falhar com 'Porque' no início")
+
+        print("OK")
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)
