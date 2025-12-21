@@ -1568,3 +1568,172 @@ class QuotationChecker(Instruction):
     """Checks if the response is wrapped with double quotation marks."""
     value = value.strip()
     return len(value) > 1 and value[0] == '"' and value[-1] == '"'
+
+
+class CedilhaFrequencyChecker(Instruction):
+    """Checks that the letter 'ç' appears a specific number of times."""
+
+    def __init__(self, instruction_id):
+        super().__init__(instruction_id)
+        self._count = None
+
+    def build_description(self, *, count=None):
+        self._count = count
+        if self._count is None:
+            self._count = random.randint(1, 5)
+        self._description_pattern = "Na sua resposta, a letra 'ç' deve aparecer exatamente {count} vezes."
+        return self._description_pattern.format(count=self._count)
+
+    def get_instruction_args(self):
+        return {"count": self._count}
+
+    def get_instruction_args_keys(self):
+        return ["count"]
+
+    def check_following(self, value: str) -> bool:
+        if self._count is None:
+            return False
+        return value.lower().count('ç') == self._count
+
+
+class NoTildeChecker(Instruction):
+    """Checks that no tilde characters are used in the response."""
+
+    def __init__(self, instruction_id):
+        super().__init__(instruction_id)
+
+    def build_description(self):
+        self._description_pattern = (
+            "Não utilize nenhum caractere com til (como ã, õ, ñ, Ã, Õ) na sua resposta."
+        )
+        return self._description_pattern
+
+    def get_instruction_args(self):
+        return None
+
+    def get_instruction_args_keys(self):
+        return []
+
+    def check_following(self, value):
+        pattern = r'[ãõñÃÕÑ~]'
+        return re.search(pattern, value) is None
+
+
+class CrasePresenceChecker(Instruction):
+    """Checks for the mandatory presence of at least one grave accent (crase)."""
+
+    def __init__(self, instruction_id):
+        super().__init__(instruction_id)
+
+    def build_description(self):
+        self._description_pattern = (
+            "Sua resposta deve incluir obrigatoriamente pelo menos um caso de "
+            "uso de crase (acento grave)."
+        )
+        return self._description_pattern
+
+    def get_instruction_args(self):
+        return None
+
+    def get_instruction_args_keys(self):
+        return []
+
+    def check_following(self, value):
+        pattern = r'[àÀ]'
+        return re.search(pattern, value) is not None
+
+
+class MesocliseChecker(Instruction):
+    """Checks if the response uses mesoclisis (verb-pronoun-suffix)."""
+
+    def __init__(self, instruction_id):
+        super().__init__(instruction_id)
+
+    def build_description(self):
+        self._description_pattern = (
+            "Utilize a colocação pronominal em mesóclise em pelo menos um verbo."
+        )
+        return self._description_pattern
+
+    def get_instruction_args(self):
+        return None
+
+    def get_instruction_args_keys(self):
+        return []
+
+    def check_following(self, value):
+        pattern = r"\b\w+-(me|te|se|nos|vos|lhe|lhes|o|a|os|as|lo|la|los|las|no|na|nos|nas)-(ei|ás|á|emos|eis|ão|ia|ias|íamos|íeis|iam)\b"
+        return re.search(pattern, value, re.IGNORECASE) is not None
+
+
+class VOSAddressChecker(Instruction):
+    """Checks that the response addresses the user using the formal 'vós'."""
+
+    def __init__(self, instruction_id):
+        super().__init__(instruction_id)
+
+    def build_description(self):
+        self._description_pattern = (
+            "Dirija-se ao leitor utilizando exclusivamente o pronome 'vós' "
+            "e as conjugações verbais correspondentes."
+        )
+        return self._description_pattern
+
+    def get_instruction_args(self):
+        return None
+
+    def get_instruction_args_keys(self):
+        return []
+
+    def check_following(self, value):
+        value_lower = value.lower()
+        has_pronoun = re.search(r'\b(vós|vosso|vossa|vossos|vossas)\b', value_lower) is not None
+        conjugation_pattern = r'\w+(ais|eis|istes|astes|sseis|ireis|ereis)\b'
+        irregular_pattern = r'\b(sois|ides|tendes|vedes)\b'
+        
+        has_regular_conjugation = re.search(conjugation_pattern, value_lower) is not None
+        has_irregular_conjugation = re.search(irregular_pattern, value_lower) is not None
+        
+        return has_pronoun and (has_regular_conjugation or has_irregular_conjugation)
+
+
+class FourPorquesGrammarChecker(Instruction):
+    """Checks if the response correctly uses all four forms of 'porque'."""
+
+    def __init__(self, instruction_id):
+        super().__init__(instruction_id)
+
+    def build_description(self):
+        self._description_pattern = (
+            "Sua resposta deve demonstrar o domínio da língua portuguesa utilizando "
+            "corretamente as quatro variações dos porquês em um único texto. "
+            "Você deve incluir: "
+            "1) A variante usada como conjunção explicativa/causal; "
+            "2) A variante usada como substantivo (o motivo); "
+            "3) A variante usada em início de perguntas; "
+            "4) A variante usada em final de frases isoladas."
+        )
+        return self._description_pattern
+
+    def get_instruction_args(self):
+        return None
+
+    def get_instruction_args_keys(self):
+        return []
+
+    def check_following(self, value):
+        text = value.strip()
+        
+        regex_inicio = r"(?:^|[.!?]\s+)[Pp]or que\b"
+        has_inicio = re.search(regex_inicio, text) is not None
+
+        regex_final_robust = r"por quê[?!.,;]?(?:\s|$)"
+        has_final = re.search(regex_final_robust, text, re.IGNORECASE) is not None
+
+        regex_substantivo = r"\b(?:o|um|do|no|este|esse|aquele) porquê\b"
+        has_substantivo = re.search(regex_substantivo, text, re.IGNORECASE) is not None
+
+        text_clean = re.sub(regex_substantivo, "", text, flags=re.IGNORECASE)
+        has_conjuncao = re.search(r"\bporque\b", text_clean, re.IGNORECASE) is not None
+
+        return has_inicio and has_final and has_substantivo and has_conjuncao
