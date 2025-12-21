@@ -221,6 +221,7 @@ PT_INSTRUCTION_DICT = {
     # _KEYWORD + "key_sentences": instructions.KeySentenceChecker,
     _KEYWORD + "forbidden_words": pt_instructions.ForbiddenWords,
     _KEYWORD + "letter_frequency": pt_instructions.LetterFrequencyChecker,
+    _KEYWORD + "cedilha_frequency": pt_instructions.CedilhaFrequencyChecker,
     _LANGUAGE + "response_language": pt_instructions.ResponseLanguageChecker,
     _LENGTH + "number_sentences": pt_instructions.NumberOfSentences,
     _LENGTH + "number_paragraphs": pt_instructions.ParagraphChecker,
@@ -228,6 +229,9 @@ PT_INSTRUCTION_DICT = {
     _LENGTH + "nth_paragraph_first_word": pt_instructions.ParagraphFirstWordCheck,
     _CONTENT + "number_placeholders": pt_instructions.PlaceholderChecker,
     _CONTENT + "postscript": pt_instructions.PostscriptChecker,
+    _CONTENT + "mesoclise_verification": pt_instructions.MesocliseChecker,
+    _CONTENT + "vos_address_verification": pt_instructions.VOSAddressChecker,
+    _CONTENT + "four_porques_verification": pt_instructions.FourPorquesGrammarChecker,
     _FORMAT + "number_bullet_lists": pt_instructions.BulletListChecker,
     # TODO(jeffreyzhou): Pre-create paragraph or use prompt to replace
     # _CONTENT + "rephrase_paragraph": instructions.RephraseParagraph,
@@ -251,6 +255,8 @@ PT_INSTRUCTION_DICT = {
     _CHANGE_CASES
     + "english_lowercase": pt_instructions.LowercaseLettersPortugueseChecker,
     _PUNCTUATION + "no_comma": pt_instructions.CommaChecker,
+    _PUNCTUATION + "no_tilde": pt_instructions.NoTildeChecker,
+    _PUNCTUATION + "crase_presence": pt_instructions.CrasePresenceChecker,
     _STARTEND + "quotation": pt_instructions.QuotationChecker,
 }
 
