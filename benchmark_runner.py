@@ -1,6 +1,8 @@
 import os
 os.environ['HF_HUB_CACHE'] = '/workspace/M-IFEvalFork/.cache/huggingface/hub'
 
+os.environ['HF_HUB_CACHE'] = '/workspace/M-IFEvalFork/.cache/huggingface/hub'
+
 import sys
 import shutil
 import subprocess
@@ -9,6 +11,7 @@ import json
 import argparse
 from datetime import datetime, timedelta
 from huggingface_hub import scan_cache_dir
+
 
 
 # --- CONFIGURAÇÃO DA ESCALA ---
@@ -72,6 +75,8 @@ def prepare_data():
     # 1. Renomear JSON para JSONL se necessário
     old_path = os.path.join("/workspace/M-IFEvalFork/data", "pt_input_data.json")
     new_path = os.path.join("/workspace/M-IFEvalFork/data", "pt_input_data.jsonl")
+    old_path = os.path.join("/workspace/M-IFEvalFork/data", "pt_input_data.json")
+    new_path = os.path.join("/workspace/M-IFEvalFork/data", "pt_input_data.jsonl")
 
     if os.path.exists(old_path) and not os.path.exists(new_path):
         os.rename(old_path, new_path)
@@ -87,7 +92,18 @@ def prepare_data():
         return
 
     # Se o arquivo FINAL_CLEAN não existir, inicie a limpeza
+    input_path = "/workspace/M-IFEvalFork/data/pt_input_data.jsonl"
+    output_path = "/workspace/M-IFEvalFork/data/pt_input_data_FINAL_CLEAN.jsonl"
+
+    # Verifique se o arquivo de saída já existe
+    if os.path.exists(output_path):
+        print("📁 O arquivo de saída FINAL_CLEAN já existe. Pulando limpeza...")
+        return
+
+    # Se o arquivo FINAL_CLEAN não existir, inicie a limpeza
     print("🧹 INICIANDO LIMPEZA CIRÚRGICA...")
+    
+    KILL_LIST = ["pt:detectable_format:constrained_response", "pt:combination:repeat_prompt"]
     
     KILL_LIST = ["pt:detectable_format:constrained_response", "pt:combination:repeat_prompt"]
     
@@ -99,6 +115,7 @@ def prepare_data():
         print("❌ Arquivo original pt_input_data.jsonl não encontrado!")
         return
 
+    # Abrir o arquivo de entrada e de saída
     # Abrir o arquivo de entrada e de saída
     with open(input_path, "r", encoding="utf-8") as fin, \
          open(output_path, "w", encoding="utf-8") as fout:
@@ -153,6 +170,7 @@ def run_benchmark():
 
     for model in MODELS_TO_BENCHMARK:
         force_gpu_cleanup()
+        force_gpu_cleanup()
         model_start_time = time.time()
         safe_model_name = model.replace('/', '__')
 
@@ -166,6 +184,7 @@ def run_benchmark():
         inferencia_sucesso = False
 
         try:
+            cmd = [sys.executable, "/workspace/M-IFEvalFork/universal_inference.py", "--model_name", model]
             cmd = [sys.executable, "/workspace/M-IFEvalFork/universal_inference.py", "--model_name", model]
             process = subprocess.run(cmd, check=True, text=True)
             
@@ -190,10 +209,19 @@ def run_benchmark():
             input_data = os.path.join(base_path, f"data/{lang}_input_data_FINAL_CLEAN.jsonl")
             resp_file = os.path.join(base_path, f"data/{lang}_input_response_data_{safe_model_name}.jsonl")
             out_dir = os.path.join(base_path, f"evaluations/{lang}_input_response_data_{safe_model_name}")
+            # Caminhos absolutos garantem que o script não se perca
+            base_path = "/workspace/M-IFEvalFork"
+            input_data = os.path.join(base_path, f"data/{lang}_input_data_FINAL_CLEAN.jsonl")
+            resp_file = os.path.join(base_path, f"data/{lang}_input_response_data_{safe_model_name}.jsonl")
+            out_dir = os.path.join(base_path, f"evaluations/{lang}_input_response_data_{safe_model_name}")
 
             if os.path.exists(resp_file):
                 os.makedirs(out_dir, exist_ok=True)
                 try:
+                    cmd_eval = [
+                        sys.executable, 
+                        "evaluation_main.py", # Removido o "-m" pois evaluation_main costuma ser script raiz
+                        "--input_data", input_data,
                     cmd_eval = [
                         sys.executable, 
                         "evaluation_main.py", # Removido o "-m" pois evaluation_main costuma ser script raiz
@@ -209,7 +237,19 @@ def run_benchmark():
                         check=True, 
                         cwd=base_path # <--- CRUCIAL: define onde o comando roda
                     )
+                    ]
+                    
+                    print(f"   [DEBUG] Executando: {' '.join(cmd_eval)}") # Para você conferir o comando
+                    
+                    subprocess.run(
+                        cmd_eval, 
+                        check=True, 
+                        cwd=base_path # <--- CRUCIAL: define onde o comando roda
+                    )
                     print(f"   ✅ {lang.upper()}: Métricas calculadas com sucesso.")
+                    
+                except subprocess.CalledProcessError as e:
+                    print(f"   ❌ {lang.upper()}: Falhou na etapa de cálculo de métricas (Código {e.returncode}).")
                     
                 except subprocess.CalledProcessError as e:
                     print(f"   ❌ {lang.upper()}: Falhou na etapa de cálculo de métricas (Código {e.returncode}).")
