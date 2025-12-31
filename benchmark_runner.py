@@ -1,8 +1,4 @@
 import os
-os.environ['HF_HUB_CACHE'] = '/workspace/M-IFEvalFork/.cache/huggingface/hub'
-
-os.environ['HF_HUB_CACHE'] = '/workspace/M-IFEvalFork/.cache/huggingface/hub'
-
 import sys
 import shutil
 import subprocess
