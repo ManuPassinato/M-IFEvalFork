@@ -1,4 +1,25 @@
 import os
+
+# --- CORREÇÃO DE PASTA TEMPORÁRIA ---
+# Cria uma pasta 'tmp_local' no diretório atual e força o Python a usá-la
+# Isso resolve o erro "No usable temporary directory found"
+local_tmp = os.path.join(os.getcwd(), "tmp_local")
+if not os.path.exists(local_tmp):
+    try:
+        os.makedirs(local_tmp)
+    except OSError:
+        pass # Ignora se já existir ou der erro (o print abaixo avisa)
+
+os.environ["TMPDIR"] = local_tmp
+os.environ["TEMP"] = local_tmp
+os.environ["TMP"] = local_tmp
+print(f"🔧 Pasta temporária redirecionada para: {local_tmp}")
+
+os.environ["HF_HOME"] = os.path.join(os.getcwd(), "hf_cache_local")
+os.environ["HF_TOKEN"] = ""
+os.environ["HF_HUB_CACHE"] = os.path.join(os.getcwd(), "hf_cache_local")
+
+import torch
 import sys
 import shutil
 import subprocess
@@ -8,266 +29,201 @@ import argparse
 from datetime import datetime, timedelta
 from huggingface_hub import scan_cache_dir
 
-
-
-# --- CONFIGURAÇÃO DA ESCALA ---
+# --- CONFIGURAÇÃO ---
 MODELS_TO_BENCHMARK = [
-    # 'Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4',
-    # 'Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4'
-    # 'deepseek-ai/deepseek-llm-7b-chat',
-    #'Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4',
-    'Qwen/Qwen2.5-1.5B-Instruct-GPTQ-Int4'
-    # 'Qwen/Qwen2.5-3B-Instruct-GPTQ-Int4',
-    # 'Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4',
-    # 'Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4',
-    # 'hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4'
+    #"Qwen/Qwen3-0.6B",
+    "Qwen/Qwen3-1.7B",
+    "Qwen/Qwen3-4B",
+    "Qwen/Qwen3-8B",
+    #"google/gemma-3-1b-it",
 ]
 
+# Idiomas que queremos testar
+TARGET_LANGUAGES = ["pt", "en", "ja", "es", "fr"]
+
 def install_dependencies():
-    """Instala as dependências necessárias se ainda não estiverem instaladas."""
-    print("📦 Verificando e instalando dependências...")
-    
-    # Dependências Python
+    """Instala as dependências necessárias."""
+    print("📦 Verificando dependências...")
     subprocess.check_call([
         sys.executable, "-m", "pip", "install", "-q", 
         "vllm==0.7.1", "bitsandbytes==0.45.1", "hf-transfer==0.1.9", 
         "langdetect", "janome", "ja_sentence_segmenter", "spacy", "nltk"
     ])
     
-    # Dependências do repositório
-    if os.path.exists("requirements.txt"):
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements.txt"])
-
-    # Setup NLTK
     import nltk
-    try:
-        nltk.data.find('tokenizers/punkt')
-    except LookupError:
-        nltk.download('punkt')
+    try: nltk.data.find('tokenizers/punkt')
+    except LookupError: nltk.download('punkt')
 
-    # Setup Spacy
-    spacy_models = [
-        "en_core_web_sm", "es_core_news_sm", "fr_core_news_sm", 
-        "ja_core_news_sm", "pt_core_news_sm", "xx_sent_ud_sm"
-    ]
-    
-    print("Instalando modelos do Spacy...")
+    # Modelos Spacy necessários para avaliação
+    spacy_models = ["en_core_web_sm", "es_core_news_sm", "fr_core_news_sm", "ja_core_news_sm", "pt_core_news_sm", "xx_sent_ud_sm"]
+    print("Verificando Spacy...")
     for model in spacy_models:
         try:
-            subprocess.check_call([sys.executable, "-m", "spacy", "download", model])
-        except subprocess.CalledProcessError:
-            print(f"⚠️ Aviso: Falha ao baixar modelo spacy {model}")
+            # Check rápido se carrega
+            import spacy
+            if not spacy.util.is_package(model):
+                subprocess.check_call([sys.executable, "-m", "spacy", "download", model])
+        except Exception:
+            pass
 
-    os.makedirs("instruction_utils", exist_ok=True)
-    with open("instruction_utils/__init__.py", "a") as f:
-        pass 
-
-    print("\n✅ Instalação de dependências concluída.")
-
-def prepare_data():
-    """Renomeia e limpa os dados de entrada."""
-    print("\n🛠️ Preparando dados...")
+# def prepare_data():
+#     """Limpa os dados de entrada para TODOS os idiomas."""
+#     print("\n🛠️ Preparando dados Multi-Idioma...")
     
-    # 1. Renomear JSON para JSONL se necessário
-    old_path = os.path.join("/workspace/M-IFEvalFork/data", "pt_input_data.json")
-    new_path = os.path.join("/workspace/M-IFEvalFork/data", "pt_input_data.jsonl")
-    old_path = os.path.join("/workspace/M-IFEvalFork/data", "pt_input_data.json")
-    new_path = os.path.join("/workspace/M-IFEvalFork/data", "pt_input_data.jsonl")
-
-    if os.path.exists(old_path) and not os.path.exists(new_path):
-        os.rename(old_path, new_path)
-        print("✅ Arquivo renomeado para .jsonl")
-
-    # 2. Limpeza Cirúrgica
-    input_path = "/workspace/M-IFEvalFork/data/pt_input_data.jsonl"
-    output_path = "/workspace/M-IFEvalFork/data/pt_input_data_FINAL_CLEAN.jsonl"
-
-    # Verifique se o arquivo de saída já existe
-    if os.path.exists(output_path):
-        print("📁 O arquivo de saída FINAL_CLEAN já existe. Pulando limpeza...")
-        return
-
-    # Se o arquivo FINAL_CLEAN não existir, inicie a limpeza
-    input_path = "/workspace/M-IFEvalFork/data/pt_input_data.jsonl"
-    output_path = "/workspace/M-IFEvalFork/data/pt_input_data_FINAL_CLEAN.jsonl"
-
-    # Verifique se o arquivo de saída já existe
-    if os.path.exists(output_path):
-        print("📁 O arquivo de saída FINAL_CLEAN já existe. Pulando limpeza...")
-        return
-
-    # Se o arquivo FINAL_CLEAN não existir, inicie a limpeza
-    print("🧹 INICIANDO LIMPEZA CIRÚRGICA...")
+#     base_dir = "/workspace/M-IFEvalFork/data"
+#     KILL_LIST = ["detectable_format:constrained_response", "combination:repeat_prompt"]
     
-    KILL_LIST = ["pt:detectable_format:constrained_response", "pt:combination:repeat_prompt"]
+#     # Mapeia codigo 'ja' para arquivo que pode estar como 'jp' ou 'ja'
+#     # Vamos padronizar a limpeza
     
-    KILL_LIST = ["pt:detectable_format:constrained_response", "pt:combination:repeat_prompt"]
-    
-    total = 0
-    kept = 0
-    removed = 0
+#     for lang in TARGET_LANGUAGES:
+#         # Tenta achar o arquivo original
+#         filename = f"{lang}_input_data.jsonl"
+#         # Correção para caso o arquivo japonês esteja como 'jp'
+#         if lang == "ja" and not os.path.exists(os.path.join(base_dir, filename)):
+#             if os.path.exists(os.path.join(base_dir, "jp_input_data.jsonl")):
+#                 filename = "jp_input_data.jsonl" # Usa o que tem
+#             elif os.path.exists(os.path.join(base_dir, "jp_input_data.json")):
+#                  # Converte json -> jsonl se precisar
+#                  old = os.path.join(base_dir, "jp_input_data.json")
+#                  new = os.path.join(base_dir, "jp_input_data.jsonl")
+#                  os.rename(old, new)
+#                  filename = "jp_input_data.jsonl"
 
-    if not os.path.exists(input_path):
-        print("❌ Arquivo original pt_input_data.jsonl não encontrado!")
-        return
+#         input_path = os.path.join(base_dir, filename)
+#         output_path = os.path.join(base_dir, f"{lang}_input_data_FINAL_CLEAN.jsonl")
 
-    # Abrir o arquivo de entrada e de saída
-    # Abrir o arquivo de entrada e de saída
-    with open(input_path, "r", encoding="utf-8") as fin, \
-         open(output_path, "w", encoding="utf-8") as fout:
+#         if not os.path.exists(input_path):
+#             print(f"⚠️ Pular {lang}: {filename} não encontrado.")
+#             continue
 
-        for line in fin:
-            total += 1
-            try:
-                data = json.loads(line)
-                ids = data.get("instruction_id_list", [])
-                is_bad_line = any(bad_id in ids for bad_id in KILL_LIST)
+#         if os.path.exists(output_path):
+#             print(f"  -> {lang.upper()} já limpo.")
+#             continue
 
-                if is_bad_line:
-                    removed += 1
-                else:
-                    fout.write(line)
-                    kept += 1
-            except json.JSONDecodeError:
-                pass
-
-    print(f"📊 RESULTADO LIMPEZA: Total: {total} | Mantidos: {kept} | Removidos: {removed}")
-    if kept > 0:
-        print(f"✅ Arquivo limpo gerado: {output_path}")
+#         print(f"🧹 Limpando {lang.upper()}...")
+        
+#         total = 0
+#         kept = 0
+        
+#         with open(input_path, "r", encoding="utf-8") as fin, \
+#              open(output_path, "w", encoding="utf-8") as fout:
+#             for line in fin:
+#                 total += 1
+#                 try:
+#                     data = json.loads(line)
+#                     ids = data.get("instruction_id_list", [])
+#                     # Verifica se tem algum ID proibido (adaptado para verificar substring)
+#                     is_bad = False
+#                     for bad_id in KILL_LIST:
+#                         # O ID no json pode ser "pt:combination..." ou só "combination..."
+#                         if any(bad_id in curr_id for curr_id in ids):
+#                             is_bad = True
+#                             break
+                    
+#                     if not is_bad:
+#                         fout.write(line)
+#                         kept += 1
+#                 except: pass
+#         print(f"     Mantidos: {kept}/{total}")
 
 def delete_model_cache(model_id):
-    """Limpa o cache do HuggingFace para liberar espaço."""
-    print(f"🧹 Tentando limpar cache para: {model_id}...")
     try:
-        hf_cache_info = scan_cache_dir()
-        found = False
-        for repo in hf_cache_info.repos:
-            if repo.repo_id == model_id:
-                shutil.rmtree(repo.repo_path)
-                found = True
-        if found: print("   -> Cache removido.")
-        else: print("   -> Nada no cache para remover.")
-    except Exception as e:
-        print(f"   -> Erro não fatal na limpeza: {e}")
+        shutil.rmtree(f"/root/.cache/huggingface/hub/models--{model_id.replace('/', '--')}", ignore_errors=True)
+    except: pass
 
 def format_time(seconds):
     return str(timedelta(seconds=int(seconds)))
 
 def force_gpu_cleanup():
-    print("🧹 [SISTEMA] Forçando limpeza de processos Zumbis na GPU...")
-    try:
-        subprocess.run(["pkill", "-f", "universal_inference.py"], check=False)
-        time.sleep(5) # Dá um tempo para a memória liberar
-    except Exception as e:
-        print(f"⚠️ Aviso na limpeza: {e}")
+    subprocess.run(["pkill", "-f", "universal_inference.py"], check=False)
+    torch.cuda.empty_cache()
+    time.sleep(2)
+
+    print(f"\n🎉 BENCHMARK GERAL")
 
 def run_benchmark():
-    benchmark_start_time = time.time()
+    benchmark_start = time.time()
 
     for model in MODELS_TO_BENCHMARK:
         force_gpu_cleanup()
-        force_gpu_cleanup()
-        model_start_time = time.time()
+        model_start = time.time()
         safe_model_name = model.replace('/', '__')
 
-        print(f"\n{'='*60}")
-        print(f"🚀 INICIANDO: {model}")
-        print(f"{'='*60}")
+        print(f"\n{'='*50}\n🚀 INICIANDO: {model}\n{'='*50}")
 
-        # --- PASSO 1: INFERÊNCIA ---
-        print(">> Passo 1: Inferência (Processo Isolado)")
+        # --- 1. INFERÊNCIA ---
+        print(">> Passo 1: Inferência Multi-Língua")
         t0_inf = time.time()
-        inferencia_sucesso = False
-
+        
         try:
-            cmd = [sys.executable, "/workspace/M-IFEvalFork/universal_inference.py", "--model_name", model]
-            cmd = [sys.executable, "/workspace/M-IFEvalFork/universal_inference.py", "--model_name", model]
-            process = subprocess.run(cmd, check=True, text=True)
+            # Caminho do script
+            script_path = "/home/emanuel/workspace/M-IFEvalFork/universal_inference.py"
             
-            inference_time = time.time() - t0_inf
-            print(f"   ⏱️ Tempo de Inferência: {format_time(inference_time)}")
-            inferencia_sucesso = True
+            # Monta o comando base
+            cmd = [sys.executable, script_path, "--model_name", model]
 
-        except subprocess.CalledProcessError as e:
-            print(f"\n❌ FALHA NO MODELO {model} (Código {e.returncode})")
-            print("   Ação: Pulando avaliação e limpando recursos.")
-            delete_model_cache(model)
+            # --- LÓGICA INTELIGENTE AQUI ---
+            # Se for modelo pesado (13B+), ativa 8-bit e aumenta uso de GPU
+            if any(size in model.lower() for size in ["13b", "30b", "32b", "34b", "70b"]):
+                print(f"   ⚖️ Modelo grande detectado ({model}). Ativando 8-bit...")
+                cmd.append("--load_in_8bit")
+                cmd.extend(["--gpu_memory_utilization", "0.9"])
+            else:
+                # Para modelos menores, usa o padrão
+                cmd.extend(["--gpu_memory_utilization", "0.75"])
+            
+            # Executa
+            subprocess.run(cmd, check=True)
+            print(f"⏱️ Tempo Inferência Total: {format_time(time.time() - t0_inf)}")
+
+        except subprocess.CalledProcessError:
+            print(f"❌ Falha crítica na inferência do modelo {model}. Pulando.")
             continue
 
-        # --- PASSO 2: AVALIAÇÃO ---
-        if inferencia_sucesso:
-            print("\n>> Passo 2: Avaliação")
-            t0_eval = time.time()
-            lang = "pt"
-            
-            # Caminhos absolutos garantem que o script não se perca
-            base_path = "/workspace/M-IFEvalFork"
-            input_data = os.path.join(base_path, f"data/{lang}_input_data_FINAL_CLEAN.jsonl")
-            resp_file = os.path.join(base_path, f"data/{lang}_input_response_data_{safe_model_name}.jsonl")
-            out_dir = os.path.join(base_path, f"evaluations/{lang}_input_response_data_{safe_model_name}")
-            # Caminhos absolutos garantem que o script não se perca
-            base_path = "/workspace/M-IFEvalFork"
-            input_data = os.path.join(base_path, f"data/{lang}_input_data_FINAL_CLEAN.jsonl")
-            resp_file = os.path.join(base_path, f"data/{lang}_input_response_data_{safe_model_name}.jsonl")
-            out_dir = os.path.join(base_path, f"evaluations/{lang}_input_response_data_{safe_model_name}")
+        # --- 2. AVALIAÇÃO (O resto do código permanece igual) ---
+        print("\n>> Passo 2: Avaliação")
+        
+        for lang in TARGET_LANGUAGES:
+            print(f"\n📊 Avaliando: {lang.upper()}")
+            input_data = f"/home/emanuel/workspace/M-IFEvalFork/data/{lang}_input_data_FINAL_CLEAN.jsonl"
+            if not os.path.exists(input_data):
+                 input_data = f"/home/emanuel/workspace/M-IFEvalFork/data/{lang}_input_data.jsonl"
+
+            resp_file = f"/home/emanuel/workspace/M-IFEvalFork/data/{lang}_input_response_data_{safe_model_name}.jsonl"
+            output_dir = f"/home/emanuel/workspace/M-IFEvalFork/evaluations/{lang}_input_response_data_{safe_model_name}"
 
             if os.path.exists(resp_file):
-                os.makedirs(out_dir, exist_ok=True)
                 try:
+                    # Verifica se evaluation_main existe no caminho certo
+                    eval_script = "/home/emanuel/workspace/M-IFEvalFork/evaluation_main.py"
+                    if not os.path.exists(eval_script):
+                         # Tenta no diretório atual se não achar no absoluto
+                         eval_script = "evaluation_main.py"
+
                     cmd_eval = [
-                        sys.executable, 
-                        "evaluation_main.py", # Removido o "-m" pois evaluation_main costuma ser script raiz
-                        "--input_data", input_data,
-                    cmd_eval = [
-                        sys.executable, 
-                        "evaluation_main.py", # Removido o "-m" pois evaluation_main costuma ser script raiz
+                        sys.executable, eval_script,
                         "--input_data", input_data,
                         "--input_response_data", resp_file,
-                        "--output_dir", out_dir
+                        "--output_dir", output_dir
                     ]
                     
-                    print(f"   [DEBUG] Executando: {' '.join(cmd_eval)}") # Para você conferir o comando
-                    
-                    subprocess.run(
-                        cmd_eval, 
-                        check=True, 
-                        cwd=base_path # <--- CRUCIAL: define onde o comando roda
-                    )
-                    ]
-                    
-                    print(f"   [DEBUG] Executando: {' '.join(cmd_eval)}") # Para você conferir o comando
-                    
-                    subprocess.run(
-                        cmd_eval, 
-                        check=True, 
-                        cwd=base_path # <--- CRUCIAL: define onde o comando roda
-                    )
-                    print(f"   ✅ {lang.upper()}: Métricas calculadas com sucesso.")
-                    
-                except subprocess.CalledProcessError as e:
-                    print(f"   ❌ {lang.upper()}: Falhou na etapa de cálculo de métricas (Código {e.returncode}).")
-                    
-                except subprocess.CalledProcessError as e:
-                    print(f"   ❌ {lang.upper()}: Falhou na etapa de cálculo de métricas (Código {e.returncode}).")
+                    subprocess.run(cmd_eval, check=True)
+                    print(f"   ✅ Sucesso: {lang}")
+                except Exception as e:
+                    print(f"   ❌ Falha na avaliação {lang}: {e}")
             else:
-                print(f"   ⚠️ {lang.upper()}: Arquivo de resposta não encontrado: {resp_file}")
+                print(f"   ⚠️ Arquivo de resposta não encontrado: {resp_file}")
 
-            print(f"   ⏱️ Tempo Avaliação: {format_time(time.time() - t0_eval)}")
+        # --- 3. LIMPEZA ---
+        print(f"\n>> Passo 3: Limpeza")
+        # delete_model_cache(model) # Cuidado com isso se não quiser baixar de novo
+        force_gpu_cleanup() 
+        print(f"⏱️ Tempo total modelo: {format_time(time.time() - model_start)}")
 
-        # --- PASSO 3: LIMPEZA ---
-        print(f"\n>> Passo 3: Limpeza Pós-Ciclo")
-        delete_model_cache(model)
-        
-        print(f"✅ Ciclo finalizado para {model}")
-        print(f"⏱️ Tempo total deste modelo: {format_time(time.time() - model_start_time)}")
-
-    total_benchmark_time = time.time() - benchmark_start_time
-    print(f"\n{'='*60}")
-    print(f"🎉 BENCHMARK COMPLETO! Tempo total: {format_time(total_benchmark_time)}")
-
+    print(f"\n🎉 BENCHMARK GERAL FINALIZADO: {format_time(time.time() - benchmark_start)}")
 if __name__ == "__main__":
     sys.path.append(os.getcwd())
-    
     install_dependencies()
-    prepare_data()
+    #prepare_data()
     run_benchmark()
