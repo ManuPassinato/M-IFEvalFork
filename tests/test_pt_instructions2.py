@@ -251,77 +251,84 @@ class TestAllInstructionsPT(unittest.TestCase):
         self.assertTrue(instruction.check_following('"Texto entre aspas"'))
         self.assertFalse(instruction.check_following('Texto sem aspas'))
 
+    # 30. CedilhaFrequencyChecker
+    def test_30_cedilha_frequency_checker(self):
+        instruction = pt_instructions.CedilhaFrequencyChecker("test_cedilha_id")
+        instruction.build_description(count=2)
+        self.assertTrue(instruction.check_following("Ação e reação."))
+        self.assertFalse(instruction.check_following("Ação apenas."))
+
+    # 31. NoTildeChecker
+    def test_31_no_tilde_checker(self):
+        instruction = pt_instructions.NoTildeChecker("test_tilde_id")
+        instruction.build_description()
+        self.assertTrue(instruction.check_following("Tudo bem?"))
+        self.assertFalse(instruction.check_following("Não."))
+
+    # 32. CrasePresenceChecker
+    def test_32_crase_presence_checker(self):
+        instruction = pt_instructions.CrasePresenceChecker("test_crase_id")
+        instruction.build_description()
+        self.assertTrue(instruction.check_following("Fui à feira."))
+        self.assertFalse(instruction.check_following("Fui a feira."))
+
+    # 33. MesocliseChecker
+    def test_33_mesoclise_checker(self):
+        instruction = pt_instructions.MesocliseChecker("test_mesoclise_id")
+        instruction.build_description()
+        self.assertTrue(instruction.check_following("Comprar-te-ei um carro."))
+        self.assertFalse(instruction.check_following("Vou te comprar."))
+
+    # 34. VOSAddressChecker
+    def test_34_vos_address_checker(self):
+        instruction = pt_instructions.VOSAddressChecker("test_vos_id")
+        instruction.build_description()
+        self.assertTrue(instruction.check_following("Vós sabeis a verdade."))
+        self.assertFalse(instruction.check_following("Você sabe a verdade."))
+
+    # 35. SpecificPorqueGrammarChecker
+    def test_35_specific_porque_grammar(self):
+        instruction = pt_instructions.SpecificPorqueGrammarChecker("test_single_porque_id")
+
+        # 1. Testando a conjunção "porque" (junto, sem acento)
+        instruction.build_description(porque_type="porque")
+        self.assertTrue(instruction.check_following("O evento foi cancelado porque choveu muito."))
+        self.assertFalse(instruction.check_following("Porque o evento foi cancelado?"))
+        self.assertFalse(instruction.check_following("Não entendi o porque do cancelamento."))
+        self.assertFalse(instruction.check_following("O evento foi cancelado por que choveu muito."))
+
+        # 2. Testando o substantivo "porquê" (junto, com acento) + NOVOS DETERMINANTES
+        instruction.build_description(porque_type="porquê")
+        self.assertTrue(instruction.check_following("Gostaria de compreender o porquê de tanta confusão."))
+        self.assertTrue(instruction.check_following("Não existe nenhum porquê para essa atitude.")) # Passa: Novo determinante
+        self.assertTrue(instruction.check_following("Todo porquê tem uma resposta.")) # Passa: Novo determinante
+        self.assertFalse(instruction.check_following("Gostaria de compreender porquê de tanta confusão."))
+        self.assertFalse(instruction.check_following("Gostaria de compreender o porque de tanta confusão."))
+
+        # 3. Testando a interrogação e pronome relativo "por que" (separado, sem acento) + NOVA REGRA
+        instruction.build_description(porque_type="por que")
+        self.assertTrue(instruction.check_following("Por que o céu é azul?"))
+        self.assertTrue(instruction.check_following("Desconheço o motivo por que ela partiu.")) # Passa: Pronome relativo
+        self.assertTrue(instruction.check_following("Essa é a razão por que não fomos ao cinema.")) # Passa: Pronome relativo
+        self.assertFalse(instruction.check_following("Não sei por que o céu é azul.")) # Falha controlada: Sem '?' e sem substantivo relativo
+        self.assertFalse(instruction.check_following("Porque o céu é azul?"))
+
+        # 4. Testando o final de frase "por quê" (separado, com acento) + NOVAS PONTUAÇÕES
+        instruction.build_description(porque_type="por quê")
+        self.assertTrue(instruction.check_following("Vocês estão a rir de por quê?"))
+        self.assertTrue(instruction.check_following("A rua está fechada, por quê, alguém sabe?"))
+        self.assertTrue(instruction.check_following("Ele faltou de novo (e eu não sei por quê).")) # Passa: Parênteses
+        self.assertTrue(instruction.check_following("Eles não vieram por quê: choveu ou esqueceram?")) # Passa: Dois pontos
+        self.assertFalse(instruction.check_following("Por quê vocês estão a rir?"))
+        self.assertFalse(instruction.check_following("Vocês estão a rir de por que?"))
+
+        # 5. Testando as restrições de quantidade (Exatamente 1 ocorrência exigida)
+        instruction.build_description(porque_type="porque")
+        self.assertFalse(instruction.check_following("O evento foi cancelado devido à chuva."))
+        self.assertFalse(instruction.check_following("Por que choveu? Porque era inverno."))
+
+
 if __name__ == '__main__':
     # Executa todos os testes e mostra detalhe
     print("Iniciando execução...")
-    unittest.main(verbosity=2)
-
-class TestInstructionFollowingPT(unittest.TestCase):
-
-    def test_cedilha_frequency(self):
-        print("Testando: CedilhaFrequencyChecker (PT)")
-        instruction = pt_instructions.CedilhaFrequencyChecker("test_cedilha_id")
-        
-        instruction.build_description(count=2)
-        
-        self.assertTrue(instruction.check_following("Ação e reação."))
-        self.assertFalse(instruction.check_following("Ação apenas."))
-        print("OK")
-
-    def test_no_tilde(self):
-        print("Testando: NoTildeChecker (PT)")
-        instruction = pt_instructions.NoTildeChecker("test_tilde_id")
-        instruction.build_description()
-        
-        self.assertTrue(instruction.check_following("Tudo bem com voce."))
-        self.assertFalse(instruction.check_following("Não."))
-        print("OK")
-
-    def test_crase_presence(self):
-        print("Testando: CrasePresenceChecker (PT)")
-        instruction = pt_instructions.CrasePresenceChecker("test_crase_id")
-        instruction.build_description()
-        
-        self.assertTrue(instruction.check_following("Fui à feira."))
-        self.assertFalse(instruction.check_following("Fui a feira."))
-        print("OK")
-
-    def test_mesoclise(self):
-        print("Testando: MesocliseChecker (PT)")
-        instruction = pt_instructions.MesocliseChecker("test_mesoclise_id")
-        instruction.build_description()
-        
-        self.assertTrue(instruction.check_following("Comprar-te-ei um carro."))
-        self.assertFalse(instruction.check_following("Vou te comprar."))
-        print("OK")
-
-    def test_vos_address(self):
-        print("Testando: VOSAddressChecker (PT)")
-        instruction = pt_instructions.VOSAddressChecker("test_vos_id")
-        instruction.build_description()
-        
-        self.assertTrue(instruction.check_following("Vós sabeis a verdade."))
-        self.assertFalse(instruction.check_following("Você sabe a verdade."))
-        print("OK")
-
-    def test_four_porques_grammar(self):
-        print("Testando: FourPorquesGrammarChecker (PT)")
-        instruction = pt_instructions.FourPorquesGrammarChecker("test_porques_id")
-        instruction.build_description()
-
-        texto_correto = (
-            "Por que o céu é azul? A ciência explica porque a luz se dispersa. "
-            "Eu entendo o porquê disso. Mas você sabe por quê?"
-        )
-        self.assertTrue(instruction.check_following(texto_correto), "Deveria passar com os 4 corretos")
-
-        texto_incompleto = "Por que fui? Não sei o porquê. Foi porque quis."
-        self.assertFalse(instruction.check_following(texto_incompleto), "Deveria falhar faltando um tipo")
-        
-        texto_erro_inicio = "Porque você foi? Eu fui porque quis. Eis o porquê. Sabe por quê?"
-        self.assertFalse(instruction.check_following(texto_erro_inicio), "Deveria falhar com 'Porque' no início")
-
-        print("OK")
-
-if __name__ == '__main__':
     unittest.main(verbosity=2)
