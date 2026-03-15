@@ -1697,43 +1697,107 @@ class VOSAddressChecker(Instruction):
         return has_pronoun and (has_regular_conjugation or has_irregular_conjugation)
 
 
-class FourPorquesGrammarChecker(Instruction):
-    """Checks if the response correctly uses all four forms of 'porque'."""
+class SpecificPorqueGrammarChecker(Instruction):
+    """Checks if the response correctly deduces and uses exactly one specific form of 'porque'."""
 
-    def __init__(self, instruction_id):
-        super().__init__(instruction_id)
+    def build_description(self, porque_type: str):
+        """Build the instruction description."""
+        self._porque_type = porque_type
+        
+        opcoes_descricao = {
+            "porque": "a variante usada como conjunção explicativa ou causal (indicando causa/explicação)",
+            "porquê": "a variante usada como substantivo (equivalente a 'o motivo' ou 'a razão')",
+            "por que": "a variante usada no início ou meio de frases interrogativas (ou equivalente a 'pelo qual')",
+            "por quê": "a variante usada exclusivamente no final de frases interrogativas ou imediatamente antes de uma pontuação"
+        }
 
-    def build_description(self):
         self._description_pattern = (
-            "Sua resposta deve demonstrar o domínio da língua portuguesa utilizando "
-            "corretamente as quatro variações dos porquês em um único texto. "
-            "Você deve incluir: "
-            "1) A variante usada como conjunção explicativa/causal; "
-            "2) A variante usada como substantivo (o motivo); "
-            "3) A variante usada em início de perguntas; "
-            "4) A variante usada em final de frases isoladas."
+            "O seu texto inteiro deve conter exatamente uma ocorrência das variações "
+            "da palavra 'porquê'. Especificamente, você deve deduzir a grafia correta e utilizar obrigatoriamente {opcao_escolhida}. "
+            "A forma exigida deve ser aplicada com a gramática e o posicionamento corretos."
         )
-        return self._description_pattern
+        return self._description_pattern.format(opcao_escolhida=opcoes_descricao[self._porque_type])
 
     def get_instruction_args(self):
-        return None
+        """Returns the keyword args of `build_description`."""
+        return {"porque_type": self._porque_type}
 
     def get_instruction_args_keys(self):
-        return []
+        """Returns the args keys of `build_description`."""
+        return ["porque_type"]
 
     def check_following(self, value):
+        """Checks if the response matches the grammatical rules for the chosen 'porque'.
+
+        Args:
+          value: A string representing the response.
+
+        Returns:
+          True if the actual response contains exactly one variation of 'porque' 
+          and applies it with correct grammar; otherwise False.
+        """
         text = value.strip()
+        pattern = r'(?i)\b(porque|porquê|porquês|por\s+que|por\s+quê)\b'
+        matches = list(re.finditer(pattern, text))
         
-        regex_inicio = r"(?:^|[.!?]\s+)[Pp]or que\b"
-        has_inicio = re.search(regex_inicio, text) is not None
+        if len(matches) != 1:
+            return False
+            
+        determiners = {
+            'o', 'os', 'um', 'uns', 'do', 'dos', 'no', 'nos', 'ao', 'aos',
+            'este', 'esse', 'aquele', 'meu', 'seu', 'nosso',
+            'algum', 'nenhum', 'todo', 'cada', 'qual', 'tal'
+        }
 
-        regex_final_robust = r"por quê[?!.,;]?(?:\s|$)"
-        has_final = re.search(regex_final_robust, text, re.IGNORECASE) is not None
+        relative_nouns = {
+            'motivo', 'razão', 'razao', 'causa', 'explicação', 'explicacao',
+            'caminho', 'modo', 'forma', 'maneira', 'meio'
+        }
+        
+        match = matches[0]
+        word = re.sub(r'\s+', ' ', match.group().lower())
+        start, end = match.span()
+        
+        text_before_match = text[:start]
+        sentences = re.split(r'(?<=[.!?])\s*', text)
+        sentence_index = len(re.findall(r'[.!?]\s*', text_before_match))
+        
+        current_sentence = sentences[sentence_index] if sentence_index < len(sentences) else text
+        
+        text_after = text[end:].lstrip()
+        next_char = text_after[0] if text_after else ''
+        
+        prev_words = re.findall(r'\b\w+\b', text_before_match.rstrip())
+        prev_word = prev_words[-1].lower() if prev_words else ''
 
-        regex_substantivo = r"\b(?:o|um|do|no|este|esse|aquele) porquê\b"
-        has_substantivo = re.search(regex_substantivo, text, re.IGNORECASE) is not None
+        if self._porque_type == "porque" and word != "porque":
+            return False
+        elif self._porque_type == "porquê" and word not in ["porquê", "porquês"]:
+            return False
+        elif self._porque_type == "por que" and word != "por que":
+            return False
+        elif self._porque_type == "por quê" and word != "por quê":
+            return False
 
-        text_clean = re.sub(regex_substantivo, "", text, flags=re.IGNORECASE)
-        has_conjuncao = re.search(r"\bporque\b", text_clean, re.IGNORECASE) is not None
+        if word == "por que":
+            if current_sentence.strip().endswith('?'):
+                pass
+            else:
+                if prev_word not in relative_nouns:
+                    return False
 
-        return has_inicio and has_final and has_substantivo and has_conjuncao
+        elif word == "porque":
+            if prev_word in determiners:
+                return False
+            if current_sentence.strip().endswith('?'):
+                return False
+
+        elif word == "por quê":
+            if next_char not in ['.', '?', '!', ',', ':', ';', ')']:
+                return False
+
+        elif word in ["porquê", "porquês"]:
+            if prev_word not in determiners:
+                return False
+                
+        return True
