@@ -231,7 +231,7 @@ PT_INSTRUCTION_DICT = {
     _CONTENT + "postscript": pt_instructions.PostscriptChecker,
     _CONTENT + "mesoclise_verification": pt_instructions.MesocliseChecker,
     _CONTENT + "vos_address_verification": pt_instructions.VOSAddressChecker,
-    _CONTENT + "four_porques_verification": pt_instructions.FourPorquesGrammarChecker,
+    _CONTENT + "specific_porque": pt_instructions.SpecificPorqueGrammarChecker,
     _FORMAT + "number_bullet_lists": pt_instructions.BulletListChecker,
     # TODO(jeffreyzhou): Pre-create paragraph or use prompt to replace
     # _CONTENT + "rephrase_paragraph": instructions.RephraseParagraph,
