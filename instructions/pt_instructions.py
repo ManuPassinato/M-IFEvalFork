@@ -1884,4 +1884,3 @@ class SpecificPorqueGrammarChecker(Instruction):
             return next_char == "" or next_char in self._ALLOWED_AFTER_POR_QUE
 
         return False
-
