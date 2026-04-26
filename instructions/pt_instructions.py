@@ -1597,14 +1597,15 @@ class CedilhaFrequencyChecker(Instruction):
 
 
 class NoTildeChecker(Instruction):
-    """Checks that no tilde characters are used in the response."""
+    """Checks that no cedilha or accent-marked characters are used."""
 
     def __init__(self, instruction_id):
         super().__init__(instruction_id)
 
     def build_description(self):
         self._description_pattern = (
-            "Não utilize nenhum caractere com til (como ã, õ, ñ, Ã, Õ) na sua resposta."
+            "Não utilize caracteres acentuados (como á, à, â, ã, é, ê, í, ó, ô, õ, ú), "
+            "nem cedilha (ç), na sua resposta."
         )
         return self._description_pattern
 
@@ -1615,12 +1616,16 @@ class NoTildeChecker(Instruction):
         return []
 
     def check_following(self, value):
-        pattern = r'[ãõñÃÕÑ~]'
-        return re.search(pattern, value) is None
+        # Rejeita cedilha e letras com acento comuns em português.
+        disallowed_pattern = (
+            r"[áàâãäéèêẽëíìîĩïóòôõöúùûũüç"
+            r"ÁÀÂÃÄÉÈÊẼËÍÌÎĨÏÓÒÔÕÖÚÙÛŨÜÇ]"
+        )
+        return re.search(disallowed_pattern, value) is None
 
 
 class CrasePresenceChecker(Instruction):
-    """Checks for the mandatory presence of at least one grave accent (crase)."""
+    """Checks for the mandatory presence of at least one crase usage."""
 
     def __init__(self, instruction_id):
         super().__init__(instruction_id)
@@ -1628,7 +1633,7 @@ class CrasePresenceChecker(Instruction):
     def build_description(self):
         self._description_pattern = (
             "Sua resposta deve incluir obrigatoriamente pelo menos um caso de "
-            "uso de crase (acento grave)."
+            "uso de crase (ex.: à, às, àquele, àquela, àquilo)."
         )
         return self._description_pattern
 
@@ -1639,8 +1644,9 @@ class CrasePresenceChecker(Instruction):
         return []
 
     def check_following(self, value):
-        pattern = r'[àÀ]'
-        return re.search(pattern, value) is not None
+        # Crase válida em português costuma aparecer nessas formas.
+        crase_pattern = r"\b(?:à|às|àquele|àquela|àqueles|àquelas|àquilo)\b"
+        return re.search(crase_pattern, value, re.IGNORECASE) is not None
 
 
 class MesocliseChecker(Instruction):
