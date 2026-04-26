@@ -2,13 +2,12 @@ import os
 
 # --- CORREÇÃO DE PASTA TEMPORÁRIA ---
 # Cria uma pasta 'tmp_local' no diretório atual e força o Python a usá-la
-# Isso resolve o erro "No usable temporary directory found"
 local_tmp = os.path.join(os.getcwd(), "tmp_local")
 if not os.path.exists(local_tmp):
     try:
         os.makedirs(local_tmp)
     except OSError:
-        pass # Ignora se já existir ou der erro (o print abaixo avisa)
+        pass 
 
 os.environ["TMPDIR"] = local_tmp
 os.environ["TEMP"] = local_tmp
@@ -17,10 +16,11 @@ print(f"🔧 Pasta temporária redirecionada para: {local_tmp}")
 
 os.environ["HF_HOME"] = os.path.join(os.getcwd(), "hf_cache_local")
 os.environ["HF_HUB_CACHE"] = os.path.join(os.getcwd(), "hf_cache_local")
-os.environ["HF_TOKEN"] = os.getenv("HF_TOKEN", "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")
+os.environ["HF_TOKEN"] = os.getenv("HF_TOKEN", "")
 os.environ["HUGGING_FACE_HUB_TOKEN"] = os.environ["HF_TOKEN"]
 
 import torch
+import gc
 import sys
 import shutil
 import subprocess
@@ -88,11 +88,13 @@ def format_time(seconds):
     return str(timedelta(seconds=int(seconds)))
 
 def force_gpu_cleanup():
+    gc.collect()
     subprocess.run(["pkill", "-f", "universal_inference.py"], check=False)
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
     time.sleep(2)
-
-    print(f"\n🎉 BENCHMARK GERAL")
 
 def run_benchmark():
     benchmark_start = time.time()
@@ -101,6 +103,7 @@ def run_benchmark():
     os.makedirs(data_dir_inference, exist_ok=True)
 
     for model in MODELS_TO_BENCHMARK:
+        print("\n🧹 Limpeza pré-modelo...")
         force_gpu_cleanup()
         model_start = time.time()
         safe_model_name = model.replace('/', '__')
@@ -109,6 +112,8 @@ def run_benchmark():
 
         # --- 1. INFERÊNCIA ---
         print(">> Passo 1: Inferência Multi-Língua")
+        print("   🧹 Limpeza pré-inferência...")
+        force_gpu_cleanup()
         t0_inf = time.time()
         
         try:
@@ -144,9 +149,14 @@ def run_benchmark():
 
         except subprocess.CalledProcessError:
             print(f"❌ Falha crítica na inferência do modelo {model}. Tentando avaliar respostas já existentes.")
+        finally:
+            print("   🧹 Limpeza pós-inferência...")
+            force_gpu_cleanup()
 
         # --- 2. AVALIAÇÃO (O resto do código permanece igual) ---
         print("\n>> Passo 2: Avaliação")
+        print("   🧹 Limpeza pré-avaliação...")
+        force_gpu_cleanup()
         
         for lang in TARGET_LANGUAGES:
             print(f"\n📊 Avaliando: {lang.upper()}")
@@ -161,6 +171,7 @@ def run_benchmark():
 
             if resp_file:
                 try:
+                    force_gpu_cleanup()
                     # Verifica se evaluation_main existe no caminho certo
                     eval_script = os.path.join(project_dir, "evaluation_main.py")
                     if not os.path.exists(eval_script):
@@ -178,6 +189,8 @@ def run_benchmark():
                     print(f"   ✅ Sucesso: {lang}")
                 except Exception as e:
                     print(f"   ❌ Falha na avaliação {lang}: {e}")
+                finally:
+                    force_gpu_cleanup()
             else:
                 print(f"   ⚠️ Arquivo de resposta não encontrado para {safe_model_name} em data_new/data")
 
