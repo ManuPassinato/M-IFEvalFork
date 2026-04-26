@@ -290,42 +290,52 @@ class TestAllInstructionsPT(unittest.TestCase):
     def test_35_specific_porque_grammar(self):
         instruction = pt_instructions.SpecificPorqueGrammarChecker("test_single_porque_id")
 
-        # 1. Testando a conjunção "porque" (junto, sem acento)
+        with self.assertRaises(ValueError):
+            instruction.build_description(porque_type="por qué")
+
+        # 1. "porque" como conjunção causal/explicativa
         instruction.build_description(porque_type="porque")
         self.assertTrue(instruction.check_following("O evento foi cancelado porque choveu muito."))
+        self.assertTrue(instruction.check_following("Você saiu porque quis?"))
+        self.assertTrue(instruction.check_following("Porque estava cansado, ele foi embora mais cedo."))
         self.assertFalse(instruction.check_following("Porque o evento foi cancelado?"))
         self.assertFalse(instruction.check_following("Não entendi o porque do cancelamento."))
         self.assertFalse(instruction.check_following("O evento foi cancelado por que choveu muito."))
 
-        # 2. Testando o substantivo "porquê" (junto, com acento) + NOVOS DETERMINANTES
+        # 2. "porquê" como substantivo, singular ou plural
         instruction.build_description(porque_type="porquê")
         self.assertTrue(instruction.check_following("Gostaria de compreender o porquê de tanta confusão."))
-        self.assertTrue(instruction.check_following("Não existe nenhum porquê para essa atitude.")) # Passa: Novo determinante
-        self.assertTrue(instruction.check_following("Todo porquê tem uma resposta.")) # Passa: Novo determinante
+        self.assertTrue(instruction.check_following("Não existe nenhum porquê para essa atitude."))
+        self.assertTrue(instruction.check_following("Todo porquê tem uma resposta."))
+        self.assertTrue(instruction.check_following("Seus porquês continuam obscuros para nós."))
+        self.assertTrue(instruction.check_following("Esses porquês ainda me intrigam."))
         self.assertFalse(instruction.check_following("Gostaria de compreender porquê de tanta confusão."))
         self.assertFalse(instruction.check_following("Gostaria de compreender o porque de tanta confusão."))
 
-        # 3. Testando a interrogação e pronome relativo "por que" (separado, sem acento) + NOVA REGRA
+        # 3. "por que" em pergunta direta, indireta ou valor relativo
         instruction.build_description(porque_type="por que")
         self.assertTrue(instruction.check_following("Por que o céu é azul?"))
-        self.assertTrue(instruction.check_following("Desconheço o motivo por que ela partiu.")) # Passa: Pronome relativo
-        self.assertTrue(instruction.check_following("Essa é a razão por que não fomos ao cinema.")) # Passa: Pronome relativo
-        self.assertFalse(instruction.check_following("Não sei por que o céu é azul.")) # Falha controlada: Sem '?' e sem substantivo relativo
+        self.assertTrue(instruction.check_following("Gostaria de saber por que o céu é azul."))
+        self.assertTrue(instruction.check_following("Não sei por que o céu é azul."))
+        self.assertTrue(instruction.check_following("Desconheço o motivo por que ela partiu."))
+        self.assertTrue(instruction.check_following("Essa é a razão por que não fomos ao cinema."))
         self.assertFalse(instruction.check_following("Porque o céu é azul?"))
+        self.assertFalse(instruction.check_following("Vocês saíram por que?"))
+        self.assertFalse(instruction.check_following("Quero entender o porquê da escolha."))
 
-        # 4. Testando o final de frase "por quê" (separado, com acento) + NOVAS PONTUAÇÕES
+        # 4. "por quê" em posição final antes de pontuação
         instruction.build_description(porque_type="por quê")
         self.assertTrue(instruction.check_following("Vocês estão a rir de por quê?"))
         self.assertTrue(instruction.check_following("A rua está fechada, por quê, alguém sabe?"))
-        self.assertTrue(instruction.check_following("Ele faltou de novo (e eu não sei por quê).")) # Passa: Parênteses
-        self.assertTrue(instruction.check_following("Eles não vieram por quê: choveu ou esqueceram?")) # Passa: Dois pontos
+        self.assertTrue(instruction.check_following("Ele faltou de novo (e eu não sei por quê)."))
+        self.assertTrue(instruction.check_following("Ninguém explicou por quê."))
         self.assertFalse(instruction.check_following("Por quê vocês estão a rir?"))
         self.assertFalse(instruction.check_following("Vocês estão a rir de por que?"))
 
-        # 5. Testando as restrições de quantidade (Exatamente 1 ocorrência exigida)
         instruction.build_description(porque_type="porque")
         self.assertFalse(instruction.check_following("O evento foi cancelado devido à chuva."))
         self.assertFalse(instruction.check_following("Por que choveu? Porque era inverno."))
+
 
 
 if __name__ == '__main__':
