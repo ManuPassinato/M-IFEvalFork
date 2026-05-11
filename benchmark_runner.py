@@ -1,13 +1,17 @@
 import os
+import torch
+import gc
+import sys
+import subprocess
+import time
+from datetime import timedelta
 
-# --- CORREÇÃO DE PASTA TEMPORÁRIA ---
-# Cria uma pasta 'tmp_local' no diretório atual e força o Python a usá-la
 local_tmp = os.path.join(os.getcwd(), "tmp_local")
 if not os.path.exists(local_tmp):
     try:
         os.makedirs(local_tmp)
     except OSError:
-        pass 
+        pass
 
 os.environ["TMPDIR"] = local_tmp
 os.environ["TEMP"] = local_tmp
@@ -16,90 +20,137 @@ print(f"🔧 Pasta temporária redirecionada para: {local_tmp}")
 
 os.environ["HF_HOME"] = os.path.join(os.getcwd(), "hf_cache_local")
 os.environ["HF_HUB_CACHE"] = os.path.join(os.getcwd(), "hf_cache_local")
-os.environ["HF_TOKEN"] = os.getenv("HF_TOKEN", "")
-os.environ["HUGGING_FACE_HUB_TOKEN"] = os.environ["HF_TOKEN"]
+# ⚡ Ativa download paralelo de shards via hf-transfer
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 
-import torch
-import gc
-import sys
-import shutil
-import subprocess
-import time
-import json
-import argparse
-from datetime import datetime, timedelta
-from huggingface_hub import scan_cache_dir
+hf_token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
+if hf_token:
+    os.environ["HF_TOKEN"] = hf_token
+    os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token
 
 # --- CONFIGURAÇÃO ---
 MODELS_TO_BENCHMARK = [
-    # "meta-llama/Llama-3.2-1B-Instruct",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.2-1B-Instruct",
     "meta-llama/Llama-3.2-3B-Instruct",
-    # "meta-llama/Llama-3.2-1B-evals",
-    # "meta-llama/Llama-3.2-3B-evals",
-    # "meta-llama/Llama-3.2-1B-Instruct-evals",
-    # "meta-llama/Llama-3.2-3B-Instruct-evals",
-    # "Qwen/Qwen3.5-0.8B",
-    # "Qwen/Qwen3.5-2B",
-    #"Qwen/Qwen3.5-4B",
-    #"Qwen/Qwen3.5-9B"
-    # "google/gemma-4-E2B-it",
-    # "google/gemma-4-E4B-it",
-    #"CEIA-UFG/Gemma-3-Gaia-PT-BR-4b-it",
-    # "Polygl0t/Tucano2-0.6B-Base",
-    # "Polygl0t/Tucano2-qwen-0.5B-Base",
-    # "Polygl0t/Tucano2-qwen-1.5B-Base",
-    # "Polygl0t/Tucano2-qwen-3.7B-Base",
+    "Qwen/Qwen3-0.6B",
+    "Qwen/Qwen3-1.7B",
+    "Qwen/Qwen3-4B",
+    "Qwen/Qwen3-8B",
+    "Qwen/Qwen3.5-0.8B",
+    "Qwen/Qwen3.5-2B",
+    "Qwen/Qwen3.5-4B",
+    "Qwen/Qwen3.5-9B",
+    "google/gemma-3-1b-pt",
+    "google/gemma-3-1b-it",
+    "google/gemma-4-E2B-it",
+    "google/gemma-4-E4B-it",
+    "CEIA-UFG/Gemma-3-Gaia-PT-BR-4b-it",
+    "Polygl0t/Tucano2-0.6B-Base",
+    "Polygl0t/Tucano2-qwen-0.5B-Base",
+    "Polygl0t/Tucano2-qwen-1.5B-Base",
+    "Polygl0t/Tucano2-qwen-3.7B-Base",
+    "Polygl0t/Tucano2-qwen-0.5B-Instruct",
+    "Polygl0t/Tucano2-qwen-1.5B-Instruct",
+    "Polygl0t/Tucano2-qwen-3.7B-Instruct",
+    "TucanoBR/Tucano-1b1-Instruct",
+    "TucanoBR/Tucano-2b4-Instruct",  
+    "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16"
 ]
 
-# Idiomas que queremos testar
 TARGET_LANGUAGES = ["pt"]
+
+GPU_UTIL_DEFAULT = 0.90
+GPU_UTIL_LARGE   = 0.88   # modelos >=13B com 8bit 
 
 def install_dependencies():
     """Instala as dependências necessárias."""
     print("📦 Verificando dependências...")
+    # vLLM 0.19.x = primeira versao estavel com suporte a transformers>=5.5
+    # (necessario para Gemma 4). vLLM 0.7.1 e incompativel com transformers v5.
     subprocess.check_call([
-        sys.executable, "-m", "pip", "install", "-q", 
-        "vllm==0.7.1", "bitsandbytes==0.45.1", "hf-transfer==0.1.9", 
-        "langdetect", "janome", "ja_sentence_segmenter", "spacy", "nltk", "accelerate"
+        sys.executable, "-m", "pip", "install", "-q",
+        "vllm==0.19.1", "bitsandbytes==0.45.1", "hf-transfer==0.1.9",
+        "langdetect", "janome", "ja_sentence_segmenter", "spacy", "nltk", "accelerate",
     ])
-    
+    # vLLM 0.19.x pina transformers<=4.57.6 mas Gemma 4 exige >=5.5.0.
+    # Instalamos transformers separadamente apos o vLLM para forcar a versao correta.
+    subprocess.check_call([
+        sys.executable, "-m", "pip", "install", "-q",
+        "--upgrade", "transformers>=5.5.0",
+    ])
+
     import nltk
     try: nltk.data.find('tokenizers/punkt')
     except LookupError: nltk.download('punkt')
 
-    # Modelos Spacy necessários para avaliação
-    spacy_models = ["en_core_web_sm", "es_core_news_sm", "fr_core_news_sm", "ja_core_news_sm", "pt_core_news_sm", "xx_sent_ud_sm"]
+    spacy_models = [
+        "en_core_web_sm", "es_core_news_sm", "fr_core_news_sm",
+        "ja_core_news_sm", "pt_core_news_sm", "xx_sent_ud_sm"
+    ]
     print("Verificando Spacy...")
     for model in spacy_models:
         try:
-            # Check rápido se carrega
             import spacy
             if not spacy.util.is_package(model):
                 subprocess.check_call([sys.executable, "-m", "spacy", "download", model])
         except Exception:
             pass
 
-def delete_model_cache(model_id):
-    try:
-        shutil.rmtree(f"/root/.cache/huggingface/hub/models--{model_id.replace('/', '--')}", ignore_errors=True)
-    except: pass
-
 def format_time(seconds):
     return str(timedelta(seconds=int(seconds)))
 
 def force_gpu_cleanup():
+    """Limpeza de VRAM. sleep reduzido: 0.5s é suficiente após empty_cache."""
     gc.collect()
-    subprocess.run(["pkill", "-f", "universal_inference.py"], check=False)
     if torch.cuda.is_available():
         torch.cuda.synchronize()
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
-    time.sleep(2)
+    # ⚡ Era sleep(2) — 2s de pausa por limpeza × dezenas de limpezas = minutos perdidos.
+    #    0.5s garante que o driver processe sem desperdiçar tempo.
+    time.sleep(0.5)
+
+def responses_exist(data_dir, safe_model_name, languages):
+    return all(
+        os.path.exists(
+            os.path.join(data_dir, f"{lang}_input_response_data_{safe_model_name}.jsonl")
+        )
+        for lang in languages
+    )
+
+def build_inference_cmd(script_path, model, data_dir, languages):
+    is_large = any(size in model.lower() for size in ["13b", "30b", "32b", "34b", "70b"])
+
+    gpu_util = GPU_UTIL_LARGE if is_large else GPU_UTIL_DEFAULT
+
+    cmd = [
+        sys.executable, script_path,
+        "--model_name", model,
+        "--data_dir", data_dir,
+        "--languages", *languages,
+        # ⚡ batch_size maior: vLLM faz continuous batching, então este valor
+        #    controla apenas o fallback Transformers. No vLLM não tem efeito direto.
+        "--batch_size", "64" if not is_large else "16",
+        "--gpu_memory_utilization", str(gpu_util),
+    ]
+
+    if is_large:
+        print(f"   ⚖️ Modelo grande detectado ({model}). Ativando 8-bit...")
+        cmd.append("--load_in_8bit")
+
+    return cmd
+
+def resolve_eval_script(project_dir):
+    eval_script = os.path.join(project_dir, "evaluation_main.py")
+    if not os.path.exists(eval_script):
+        return "evaluation_main.py"
+    return eval_script
 
 def run_benchmark():
     benchmark_start = time.time()
     project_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir_inference = os.path.join(project_dir, "data_new")
+    data_dir_inference = os.path.join(project_dir, "data_new_2_2")
     os.makedirs(data_dir_inference, exist_ok=True)
 
     for model in MODELS_TO_BENCHMARK:
@@ -112,79 +163,49 @@ def run_benchmark():
 
         # --- 1. INFERÊNCIA ---
         print(">> Passo 1: Inferência Multi-Língua")
-        print("   🧹 Limpeza pré-inferência...")
-        force_gpu_cleanup()
-        t0_inf = time.time()
-        
-        try:
-                    current_dir = project_dir
-                    script_path = os.path.join(current_dir, "universal_inference.py")
 
-                    # Verifica se TODOS os idiomas já têm resposta gerada
-                    all_exist = all(
-                        os.path.exists(
-                            os.path.join(data_dir_inference, f"{lang}_input_response_data_{safe_model_name}.jsonl")
-                        )
-                        for lang in TARGET_LANGUAGES
-                    )
-
-                    if all_exist:
-                        print(f"   ♻️ Respostas já existem para todos os idiomas, pulando inferência.")
-                    else:
-                        # Monta o comando base
-                        cmd = [sys.executable, script_path, 
-                               "--model_name", model, 
-                               "--data_dir", data_dir_inference, 
-                               "--languages", *TARGET_LANGUAGES,]
-
-                        if any(size in model.lower() for size in ["13b", "30b", "32b", "34b", "70b"]):
-                            print(f"   ⚖️ Modelo grande detectado ({model}). Ativando 8-bit...")
-                            cmd.append("--load_in_8bit")
-                            cmd.extend(["--gpu_memory_utilization", "0.9"])
-                        else:
-                            cmd.extend(["--gpu_memory_utilization", "0.75"])
-
-                        subprocess.run(cmd, check=True)
-                        print(f"⏱️ Tempo Inferência Total: {format_time(time.time() - t0_inf)}")
-
-        except subprocess.CalledProcessError:
-            print(f"❌ Falha crítica na inferência do modelo {model}. Tentando avaliar respostas já existentes.")
-        finally:
-            print("   🧹 Limpeza pós-inferência...")
+        # ⚡ Pula inferência se arquivo já existe (útil ao retomar após falha)
+        if responses_exist(data_dir_inference, safe_model_name, TARGET_LANGUAGES):
+            print(f"   ⏭️ Respostas já existem para {safe_model_name}. Pulando inferência.")
+        else:
             force_gpu_cleanup()
+            t0_inf = time.time()
+            try:
+                script_path = os.path.join(project_dir, "universal_inference.py")
+                cmd = build_inference_cmd(script_path, model, data_dir_inference, TARGET_LANGUAGES)
+                subprocess.run(cmd, check=True)
+                print(f"⏱️ Tempo Inferência Total: {format_time(time.time() - t0_inf)}")
+            except subprocess.CalledProcessError:
+                print(f"❌ Falha crítica na inferência do modelo {model}. Tentando avaliar respostas já existentes.")
+            finally:
+                print("   🧹 Limpeza pós-inferência...")
+                force_gpu_cleanup()
 
-        # --- 2. AVALIAÇÃO (O resto do código permanece igual) ---
+        # --- 2. AVALIAÇÃO ---
         print("\n>> Passo 2: Avaliação")
-        print("   🧹 Limpeza pré-avaliação...")
         force_gpu_cleanup()
-        
+
+        eval_script = resolve_eval_script(project_dir)
         for lang in TARGET_LANGUAGES:
             print(f"\n📊 Avaliando: {lang.upper()}")
             input_data = os.path.join(project_dir, "data", f"{lang}_input_data.jsonl")
-  
+
             resp_candidates = [
-                os.path.join(project_dir, "data_new", f"{lang}_input_response_data_{safe_model_name}.jsonl"),
+                os.path.join(project_dir, "data_new_2_2", f"{lang}_input_response_data_{safe_model_name}.jsonl"),
                 os.path.join(project_dir, "data", f"{lang}_input_response_data_{safe_model_name}.jsonl"),
             ]
             resp_file = next((p for p in resp_candidates if os.path.exists(p)), None)
-            output_dir = os.path.join(project_dir, "eval_new", f"{lang}_input_response_data_{safe_model_name}")
+            output_dir = os.path.join(project_dir, "eval_new_2", f"{lang}_input_response_data_{safe_model_name}")
 
             if resp_file:
                 try:
                     force_gpu_cleanup()
-                    # Verifica se evaluation_main existe no caminho certo
-                    eval_script = os.path.join(project_dir, "evaluation_main.py")
-                    if not os.path.exists(eval_script):
-                         # Tenta no diretório atual se não achar no absoluto
-                         eval_script = "evaluation_main.py"
-
                     cmd_eval = [
                         sys.executable, eval_script,
                         "--input_data", input_data,
                         "--input_response_data", resp_file,
                         "--output_dir", output_dir
                     ]
-                    
                     subprocess.run(cmd_eval, check=True)
                     print(f"   ✅ Sucesso: {lang}")
                 except Exception as e:
@@ -192,17 +213,16 @@ def run_benchmark():
                 finally:
                     force_gpu_cleanup()
             else:
-                print(f"   ⚠️ Arquivo de resposta não encontrado para {safe_model_name} em data_new/data")
+                print(f"   ⚠️ Arquivo de resposta não encontrado para {safe_model_name} em data_new_2_2/data")
 
         # --- 3. LIMPEZA ---
         print(f"\n>> Passo 3: Limpeza")
-        # delete_model_cache(model) # Cuidado com isso se não quiser baixar de novo
-        force_gpu_cleanup() 
+        force_gpu_cleanup()
         print(f"⏱️ Tempo total modelo: {format_time(time.time() - model_start)}")
 
     print(f"\n🎉 BENCHMARK GERAL FINALIZADO: {format_time(time.time() - benchmark_start)}")
+
 if __name__ == "__main__":
     sys.path.append(os.getcwd())
     install_dependencies()
-    #prepare_data()
     run_benchmark()
