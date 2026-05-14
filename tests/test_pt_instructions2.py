@@ -263,7 +263,12 @@ class TestAllInstructionsPT(unittest.TestCase):
         instruction = pt_instructions.NoTildeChecker("test_tilde_id")
         instruction.build_description()
         self.assertTrue(instruction.check_following("Tudo bem?"))
+        self.assertTrue(instruction.check_following("A crase à noite está correta."))
+        self.assertTrue(instruction.check_following("À tarde, há café e música clássica."))
+        self.assertTrue(instruction.check_following("Açaí e café combinam bem."))
         self.assertFalse(instruction.check_following("Não."))
+        self.assertFalse(instruction.check_following("Põe isso aqui."))
+        self.assertFalse(instruction.check_following("Senõrita."))
 
     # 32. CrasePresenceChecker
     def test_32_crase_presence_checker(self):
