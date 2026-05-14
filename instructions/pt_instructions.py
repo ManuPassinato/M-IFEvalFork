@@ -1597,15 +1597,15 @@ class CedilhaFrequencyChecker(Instruction):
 
 
 class NoTildeChecker(Instruction):
-    """Checks that no cedilha or accent-marked characters are used."""
+    """Checks that no tilde-marked characters are used."""
 
     def __init__(self, instruction_id):
         super().__init__(instruction_id)
 
     def build_description(self):
         self._description_pattern = (
-            "Não utilize caracteres acentuados (como á, à, â, ã, é, ê, í, ó, ô, õ, ú), "
-            "nem cedilha (ç), na sua resposta."
+            "Não utilize nenhum caractere com til (como ã, õ, ñ, Ã, Õ, Ñ) "
+            "na sua resposta."
         )
         return self._description_pattern
 
@@ -1616,12 +1616,10 @@ class NoTildeChecker(Instruction):
         return []
 
     def check_following(self, value):
-        # Rejeita cedilha e letras com acento comuns em português.
-        disallowed_pattern = (
-            r"[áàâãäéèêẽëíìîĩïóòôõöúùûũüç"
-            r"ÁÀÂÃÄÉÈÊẼËÍÌÎĨÏÓÒÔÕÖÚÙÛŨÜÇ]"
-        )
+        # O nome da instrução é literal: proíbe apenas caracteres com til.
+        disallowed_pattern = r"[ãõñÃÕÑ]"
         return re.search(disallowed_pattern, value) is None
+
 
 
 class CrasePresenceChecker(Instruction):
