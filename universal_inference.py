@@ -71,11 +71,11 @@ def clean_response(text, stop_tokens_str):
 
     # 3. REMOVE MARCADORES DE PENSAMENTO EM INGLÊS
     markers = [
-        "Okay, I need to", "Okay, the user", "Here is the blog post", 
+        "Okay, I need to", "Okay, the user", "Here is the blog post",
         "Sure, here", "Let me start by", "I need to write", "Analysis:",
         "First, I will", "To write this essay", "First, I'll outline"
     ]
-    
+
     for m in markers:
         if m in text:
             index = text.find(m)
@@ -84,7 +84,7 @@ def clean_response(text, stop_tokens_str):
                 if len(parts) > 1:
                     text = "\n\n".join(parts[1:])
                 else:
-                    return "" 
+                    return ""
             else:
                 text = text[:index]
 
@@ -98,7 +98,7 @@ def clean_response(text, stop_tokens_str):
     # Remove lixo repetido no final
     text = re.sub(r'(\s*<pad>\s*)+$', '', text)
     text = re.sub(r'(\s*</s>\s*)+$', '', text)
-    
+
     return text.strip()
 
 def build_transformers_pipeline(model_name, tokenizer, use_8bit):
@@ -160,13 +160,14 @@ def run_multilang_inference(
     is_qwen_3 = "qwen3" in model_lower or "qwen-3" in model_lower
     is_gemma = "gemma" in model_lower
     is_llama_32 = "llama-3.2" in model_lower
-    prefer_transformers = is_qwen_3 or is_gemma or is_llama_32
-    
+    # Qwen3/Qwen3.5 agora vai para vLLM — removido de prefer_transformers
+    prefer_transformers = is_gemma or is_llama_32
+
     llm_engine = None; hf_pipeline = None; tokenizer = None
 
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, token=HF_TOKEN)
-        
+
         # --- LÓGICA DE "SEM LIMITES" (AUTO-DETECT) ---
         # Tenta pegar o limite do config do modelo. Se não achar, usa 32k.
         # Qwen 3 geralmente suporta 32768.
@@ -177,19 +178,19 @@ def run_multilang_inference(
             model_max_context = 32768
 
         max_generation_tokens = min(max_new_tokens, model_max_context)
-            
+
         print(f"📏 Limite de Geração Definido para: {model_max_context} tokens")
 
         if prefer_transformers:
             print(f"🚀 [MODO TRANSFORMERS] Usando backend compatível...")
             hf_pipeline = build_transformers_pipeline(model_name, tokenizer, use_8bit)
-        
+
         elif VLLM_AVAILABLE:
             print(f"⚡ [MODO vLLM] Carregando engine...")
             quant_method = None
             if "gptq" in model_lower: quant_method = "gptq"
             elif "awq" in model_lower: quant_method = "awq"
-            
+
             # No vLLM, max_model_len define o contexto total (Prompt + Resposta)
             # Se o usuário não passou argumento, usamos o detectado
             vllm_len = max_len if max_len > 4096 else model_max_context
@@ -204,6 +205,10 @@ def run_multilang_inference(
                 print(f"⚠️ vLLM falhou ({vllm_error}). Fazendo fallback para Transformers...")
                 hf_pipeline = build_transformers_pipeline(model_name, tokenizer, use_8bit)
                 llm_engine = None
+
+        else:
+            print(f"🚀 [MODO TRANSFORMERS] vLLM não disponível, usando Transformers...")
+            hf_pipeline = build_transformers_pipeline(model_name, tokenizer, use_8bit)
 
     except Exception as e:
         sys.exit(f"❌ Erro Fatal: {e}")
@@ -229,16 +234,16 @@ def run_multilang_inference(
             ds = load_dataset("json", data_files={"train": input_path}, split="train")
             prompt_col = "prompt"
             if "prompt" not in ds.column_names:
-                for c in ["instruction", "input"]: 
+                for c in ["instruction", "input"]:
                     if c in ds.column_names: prompt_col = c; break
-            
+
             raw_prompts = [item[prompt_col] for item in ds]
             final_prompts = []
 
             print(f"   ⚙️ Aplicando Chat Template...")
             for prompt in raw_prompts:
                 msgs = [{"role": "user", "content": prompt}]
-                formatted = prompt 
+                formatted = prompt
                 if tokenizer.chat_template:
                     try:
                         if is_qwen_3:
@@ -257,37 +262,49 @@ def run_multilang_inference(
             # === GERAÇÃO (Transformers) ===
             if hf_pipeline:
                 from tqdm import tqdm
-                
+
                 stop_strs = ["<|endoftext|>", "<|im_end|>", "<|end|>", "</s>"]
-                
+
                 gen_cfg = build_generation_config(tokenizer, is_qwen_3, max_generation_tokens)
                 gen_kwargs = {
                     "return_full_text": False,
                     "generation_config": gen_cfg,
                 }
 
-                progress = tqdm(
-                    hf_pipeline(final_prompts, batch_size=batch_size, **gen_kwargs),
-                    total=len(final_prompts),
-                    desc="   ⚡ Gerando respostas",
-                    unit="amostra",
-                )
-                for outputs in progress:
-                    raw_text = outputs[0]["generated_text"]
-                    clean_txt = clean_response(raw_text, stop_strs)
-                    generated_text.append(clean_txt)
+                total_prompts = len(final_prompts)
+                n_batches = (total_prompts + batch_size - 1) // batch_size
+                print(f"   📝 {total_prompts} prompts | batch_size={batch_size} | {n_batches} batches")
+                print(f"   ⏳ Gerando... (cada batch pode demorar alguns minutos)")
 
-                if len(clean_txt.split()) < 3:
-                    clean_txt = raw_text[:2000]  # fallback bruto
+                raw_text = ""  # garante que existe para o fallback
+                with tqdm(total=total_prompts, desc="   ⚡ Gerando respostas", unit="amostra") as pbar:
+                    for outputs in hf_pipeline(final_prompts, batch_size=batch_size, **gen_kwargs):
+                        raw_text = outputs[0]["generated_text"]
+                        clean_txt = clean_response(raw_text, stop_strs)
+                        # Fallback bruto se limpeza removeu conteúdo demais
+                        if len(clean_txt.split()) < 3:
+                            clean_txt = raw_text[:2000]
+                        generated_text.append(clean_txt)
+                        pbar.update(1)
 
             # === GERAÇÃO (vLLM) ===
             elif llm_engine:
-                # vLLM: Definimos max_tokens alto
-                sampling_params = SamplingParams(
-                    temperature=0.0,
-                    max_tokens=max_generation_tokens,
-                    stop=["</s>", "<|end|>", "<|im_end|>"]
-                )
+                # Qwen3/Qwen3.5: sampling com temperatura (thinking mode)
+                # Demais modelos: greedy (temperatura 0)
+                if is_qwen_3:
+                    sampling_params = SamplingParams(
+                        temperature=0.7,
+                        top_p=0.8,
+                        max_tokens=max_generation_tokens,
+                        stop=["</s>", "<|end|>", "<|im_end|>"]
+                    )
+                else:
+                    sampling_params = SamplingParams(
+                        temperature=0.0,
+                        max_tokens=max_generation_tokens,
+                        stop=["</s>", "<|end|>", "<|im_end|>"]
+                    )
+
                 outputs = llm_engine.generate(final_prompts, sampling_params)
                 outputs.sort(key=lambda x: int(x.request_id))
                 total = len(outputs)
@@ -316,7 +333,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_model_len", type=int, default=8096)
     parser.add_argument("--data_dir", type=str, default=None)
     parser.add_argument("--load_in_8bit", action="store_true")
-    parser.add_argument("--languages", type=str, nargs="+", default=["en"])  # <-- NOVO
+    parser.add_argument("--languages", type=str, nargs="+", default=["en"])
     parser.add_argument("--max_new_tokens", type=int, default=DEFAULT_MAX_NEW_TOKENS)
     parser.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
     args = parser.parse_args()
