@@ -99,25 +99,12 @@ def write_outputs(output_jsonl_filename, outputs):
       f.write("\n")
 
 
-def _resolve_response(inp, prompt_to_response, key_to_response, index_to_response, row_index):
-  """Resolves response with prompt/key/index fallback."""
-  if inp.prompt in prompt_to_response:
-    return prompt_to_response[inp.prompt]
-  if inp.key in key_to_response:
-    return key_to_response[inp.key]
-  if row_index < len(index_to_response):
-    return index_to_response[row_index]
-  raise KeyError(
-      "No response found for input with "
-      f"key={inp.key}, row_index={row_index}, prompt={inp.prompt!r}"
-  )
-
-
 def test_instruction_following_strict(
     inp,
-    response,
+    prompt_to_response,
 ):
   """Tests response to see if instrutions are followed."""
+  response = prompt_to_response[inp.prompt]
   instruction_list = inp.instruction_id_list
   is_following_list = []
 
@@ -125,10 +112,7 @@ def test_instruction_following_strict(
     instruction_cls = instructions_registry.INSTRUCTION_DICT[instruction_id]
     instruction = instruction_cls(instruction_id)
 
-    instruction_kwargs = {}
-    if inp.kwargs and index < len(inp.kwargs) and isinstance(inp.kwargs[index], dict):
-      instruction_kwargs = inp.kwargs[index]
-    instruction.build_description(**instruction_kwargs)
+    instruction.build_description(**inp.kwargs[index])
     args = instruction.get_instruction_args()
     if args and "prompt" in args:
       instruction.build_description(prompt=inp.prompt)
@@ -149,9 +133,10 @@ def test_instruction_following_strict(
 
 def test_instruction_following_loose(
     inp,
-    response,
+    prompt_to_response,
 ):
   """Tests response for an upper bound for following instructions."""
+  response = prompt_to_response[inp.prompt]
   if isinstance(response, str):
     r = response.split("\n")
     response_remove_first = "\n".join(r[1:]).strip()
@@ -182,10 +167,7 @@ def test_instruction_following_loose(
     instruction_cls = instructions_registry.INSTRUCTION_DICT[instruction_id]
     instruction = instruction_cls(instruction_id)
 
-    instruction_kwargs = {}
-    if inp.kwargs and index < len(inp.kwargs) and isinstance(inp.kwargs[index], dict):
-      instruction_kwargs = inp.kwargs[index]
-    instruction.build_description(**instruction_kwargs)
+    instruction.build_description(**inp.kwargs[index])
     args = instruction.get_instruction_args()
     if args and "prompt" in args:
       instruction.build_description(prompt=inp.prompt)
@@ -207,20 +189,14 @@ def test_instruction_following_loose(
   )
 
 
-def read_responses(input_jsonl_filename):
-  """Creates prompt/key/index based response lookup maps."""
-  prompt_to_response = {}
-  key_to_response = {}
-  index_to_response = []
+def read_prompt_to_response_dict(input_jsonl_filename):
+  """Creates dictionary matching prompt and response."""
+  return_dict = {}
   with open(input_jsonl_filename, "r", encoding='utf-8') as f:
     for l in f:
       example = json.loads(l)
-      response = example["response"]
-      prompt_to_response[example["prompt"]] = response
-      if "key" in example:
-        key_to_response[example["key"]] = response
-      index_to_response.append(response)
-  return prompt_to_response, key_to_response, index_to_response
+      return_dict[example["prompt"]] = example["response"]
+  return return_dict
 
 
 def print_report(outputs):
@@ -280,7 +256,7 @@ def main(argv):
     raise app.UsageError("Too many command-line arguments.")
 
   inputs = read_prompt_list(_INPUT_DATA.value)
-  prompt_to_response, key_to_response, index_to_response = read_responses(
+  prompt_to_response = read_prompt_to_response_dict(
       _INPUT_RESPONSE_DATA.value)
 
   # get instruction following results
@@ -290,15 +266,8 @@ def main(argv):
   ]:
     logging.info("Generating %s...", output_file_name)
     outputs = []
-    for row_index, inp in enumerate(inputs):
-      response = _resolve_response(
-          inp=inp,
-          prompt_to_response=prompt_to_response,
-          key_to_response=key_to_response,
-          index_to_response=index_to_response,
-          row_index=row_index,
-      )
-      outputs.append(func(inp, response))
+    for inp in inputs:
+      outputs.append(func(inp, prompt_to_response))
     follow_all_instructions = [o.follow_all_instructions for o in outputs]
     accuracy = sum(follow_all_instructions) / len(outputs)
     logging.info("Accuracy: %f", accuracy)

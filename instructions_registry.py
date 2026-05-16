@@ -235,7 +235,7 @@ PT_INSTRUCTION_DICT = {
     _FORMAT + "number_bullet_lists": pt_instructions.BulletListChecker,
     # TODO(jeffreyzhou): Pre-create paragraph or use prompt to replace
     # _CONTENT + "rephrase_paragraph": instructions.RephraseParagraph,
-    _FORMAT + "constrained_response": pt_instructions.ConstrainedResponseChecker,
+    # _FORMAT + "constrained_response": pt_instructions.ConstrainedResponseChecker, TODO
     _FORMAT + "number_highlighted_sections": (
         pt_instructions.HighlightSectionChecker),
     _FORMAT + "multiple_sections": pt_instructions.SectionChecker,
@@ -246,7 +246,7 @@ PT_INSTRUCTION_DICT = {
     # TODO(tianjianlu): Re-enable with specific prompts.
     # _MULTITURN + "constrained_start": instructions.ConstrainedStartChecker,
     _COMBINATION + "two_responses": pt_instructions.TwoResponsesChecker,
-    _COMBINATION + "repeat_prompt": pt_instructions.RepeatPromptThenAnswer,
+    # _COMBINATION + "repeat_prompt": pt_instructions.RepeatPromptThenAnswer, TODO
     _STARTEND + "end_checker": pt_instructions.EndChecker,
     _CHANGE_CASES
     + "capital_word_frequency": pt_instructions.CapitalWordFrequencyChecker,

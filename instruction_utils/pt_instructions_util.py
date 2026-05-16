@@ -129,10 +129,7 @@ def count_words(text):
 
 @functools.lru_cache(maxsize=None)
 def _get_sentence_tokenizer():
-    nlp = spacy.load("pt_core_news_sm", disable=["tagger", "parser", "ner"])
-    if "sentencizer" not in nlp.pipe_names:
-      nlp.add_pipe("sentencizer")
-    return nlp
+    return spacy.load("pt_core_news_sm", disable=["tagger", "parser", "ner"])
 
 def tokenize_words(text):
   """Returns a list of words from the text, respecting Portuguese special characters and features with spaCy."""

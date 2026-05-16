@@ -1597,15 +1597,14 @@ class CedilhaFrequencyChecker(Instruction):
 
 
 class NoTildeChecker(Instruction):
-    """Checks that no tilde-marked characters are used."""
+    """Checks that no tilde characters are used in the response."""
 
     def __init__(self, instruction_id):
         super().__init__(instruction_id)
 
     def build_description(self):
         self._description_pattern = (
-            "Não utilize nenhum caractere com til (como ã, õ, ñ, Ã, Õ, Ñ) "
-            "na sua resposta."
+            "Não utilize nenhum caractere com til (como ã, õ, ñ, Ã, Õ) na sua resposta."
         )
         return self._description_pattern
 
@@ -1616,14 +1615,12 @@ class NoTildeChecker(Instruction):
         return []
 
     def check_following(self, value):
-        # O nome da instrução é literal: proíbe apenas caracteres com til.
-        disallowed_pattern = r"[ãõñÃÕÑ]"
-        return re.search(disallowed_pattern, value) is None
-
+        pattern = r'[ãõñÃÕÑ~]'
+        return re.search(pattern, value) is None
 
 
 class CrasePresenceChecker(Instruction):
-    """Checks for the mandatory presence of at least one crase usage."""
+    """Checks for the mandatory presence of at least one grave accent (crase)."""
 
     def __init__(self, instruction_id):
         super().__init__(instruction_id)
@@ -1631,7 +1628,7 @@ class CrasePresenceChecker(Instruction):
     def build_description(self):
         self._description_pattern = (
             "Sua resposta deve incluir obrigatoriamente pelo menos um caso de "
-            "uso de crase (ex.: à, às, àquele, àquela, àquilo)."
+            "uso de crase (acento grave)."
         )
         return self._description_pattern
 
@@ -1642,9 +1639,8 @@ class CrasePresenceChecker(Instruction):
         return []
 
     def check_following(self, value):
-        # Crase válida em português costuma aparecer nessas formas.
-        crase_pattern = r"\b(?:à|às|àquele|àquela|àqueles|àquelas|àquilo)\b"
-        return re.search(crase_pattern, value, re.IGNORECASE) is not None
+        pattern = r'[àÀ]'
+        return re.search(pattern, value) is not None
 
 
 class MesocliseChecker(Instruction):
@@ -1702,93 +1698,25 @@ class VOSAddressChecker(Instruction):
 
 
 class SpecificPorqueGrammarChecker(Instruction):
-    """Checks whether the response uses exactly one selected porque-form correctly."""
-
-    _VALID_TYPES = ("porque", "porquê", "por que", "por quê")
-    _ALL_VARIANTS_PATTERN = re.compile(
-        r"(?i)\b(?:porque|porquê|porquês|por\s+que|por\s+quê)\b"
-    )
-    _DETERMINERS = {
-        "o", "a", "os", "as",
-        "um", "uma", "uns", "umas",
-        "do", "da", "dos", "das",
-        "no", "na", "nos", "nas",
-        "ao", "aos", "à", "às",
-        "este", "esta", "estes", "estas",
-        "esse", "essa", "esses", "essas",
-        "aquele", "aquela", "aqueles", "aquelas",
-        "meu", "minha", "meus", "minhas",
-        "teu", "tua", "teus", "tuas",
-        "seu", "sua", "seus", "suas",
-        "nosso", "nossa", "nossos", "nossas",
-        "vosso", "vossa", "vossos", "vossas",
-        "algum", "alguma", "alguns", "algumas",
-        "nenhum", "nenhuma", "nenhuns", "nenhumas",
-        "todo", "toda", "todos", "todas",
-        "muito", "muita", "muitos", "muitas",
-        "pouco", "pouca", "poucos", "poucas",
-        "certo", "certa", "certos", "certas",
-        "outro", "outra", "outros", "outras",
-        "qual", "quais", "tal", "tais",
-        "quanto", "quanta", "quantos", "quantas",
-        "esse", "essa", "esses", "essas",
-        "este", "esta", "estes", "estas",
-        "aquele", "aquela", "aqueles", "aquelas",
-    }
-    _RELATIVE_NOUNS = {
-        "motivo", "motivos",
-        "razão", "razões", "razao", "razoes",
-        "causa", "causas",
-        "explicação", "explicações", "explicacao", "explicacoes",
-        "caminho", "caminhos",
-        "modo", "modos",
-        "forma", "formas",
-        "maneira", "maneiras",
-        "meio", "meios",
-    }
-    _INDIRECT_QUESTION_CONTEXT = re.compile(
-        r"(?i)\b(?:"
-        r"não\s+sei|nao\s+sei|"
-        r"sei|saber|sabia|sabiam|"
-        r"gostaria(?:\s+de)?\s+saber|quero\s+saber|queria\s+saber|"
-        r"entendo|entender|compreendo|compreender|"
-        r"explico|explicar|explique|"
-        r"pergunto|perguntar|questiono|questionar|"
-        r"desconheço|desconheco|desconhecer|"
-        r"investigo|investigar|descubro|descobrir|"
-        r"mostro|mostrar|digo|dizer|"
-        r"verifico|verificar"
-        r")\b"
-    )
-    _ALLOWED_AFTER_POR_QUE = {
-        ".", "?", "!", ",", ":", ";", ")", "]", "}", '"', "'", "»", "”", "’"
-    }
+    """Checks if the response correctly deduces and uses exactly one specific form of 'porque'."""
 
     def build_description(self, porque_type: str):
         """Build the instruction description."""
-        if porque_type not in self._VALID_TYPES:
-            raise ValueError(
-                "porque_type must be one of "
-                f"{self._VALID_TYPES}, but {porque_type} was given."
-            )
-
         self._porque_type = porque_type
+        
         opcoes_descricao = {
-            "porque": 'a forma "porque", usada como conjunção explicativa ou causal',
-            "porquê": 'a forma "porquê", usada como substantivo (equivalente a "o motivo" ou "a razão")',
-            "por que": 'a forma "por que", usada em perguntas diretas ou indiretas, ou com valor relativo ("pelo qual")',
-            "por quê": 'a forma "por quê", usada em posição final antes de pontuação ou no fim do enunciado',
+            "porque": "a variante usada como conjunção explicativa ou causal (indicando causa/explicação)",
+            "porquê": "a variante usada como substantivo (equivalente a 'o motivo' ou 'a razão')",
+            "por que": "a variante usada no início ou meio de frases interrogativas (ou equivalente a 'pelo qual')",
+            "por quê": "a variante usada exclusivamente no final de frases interrogativas ou imediatamente antes de uma pontuação"
         }
 
         self._description_pattern = (
-            "O seu texto inteiro deve conter exatamente uma ocorrência de uma das "
-            'formas "porque", "porquê", "por que" ou "por quê". '
-            "Neste caso, use obrigatoriamente {opcao_escolhida}, apenas uma vez, "
-            "com gramática e posicionamento corretos."
+            "O seu texto inteiro deve conter exatamente uma ocorrência das variações "
+            "da palavra 'porquê'. Especificamente, você deve deduzir a grafia correta e utilizar obrigatoriamente {opcao_escolhida}. "
+            "A forma exigida deve ser aplicada com a gramática e o posicionamento corretos."
         )
-        return self._description_pattern.format(
-            opcao_escolhida=opcoes_descricao[self._porque_type]
-        )
+        return self._description_pattern.format(opcao_escolhida=opcoes_descricao[self._porque_type])
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
@@ -1798,93 +1726,78 @@ class SpecificPorqueGrammarChecker(Instruction):
         """Returns the args keys of `build_description`."""
         return ["porque_type"]
 
-    @staticmethod
-    def _normalize_match(value: str) -> str:
-        return re.sub(r"\s+", " ", value.strip().lower())
-
-    @staticmethod
-    def _get_sentence_window(text: str, start: int, end: int):
-        sentence_start = 0
-        for i in range(start - 1, -1, -1):
-            if text[i] in ".?!":
-                sentence_start = i + 1
-                break
-
-        sentence_end = len(text)
-        for i in range(end, len(text)):
-            if text[i] in ".?!":
-                sentence_end = i + 1
-                break
-
-        sentence = text[sentence_start:sentence_end]
-        return sentence, start - sentence_start, end - sentence_start
-
-    @staticmethod
-    def _next_non_space_char(suffix: str) -> str:
-        for char in suffix:
-            if not char.isspace():
-                return char
-        return ""
-
-    @classmethod
-    def _has_indirect_question_context(cls, previous_words) -> bool:
-        if not previous_words:
-            return False
-        window = " ".join(previous_words[-6:])
-        return cls._INDIRECT_QUESTION_CONTEXT.search(window) is not None
-
     def check_following(self, value):
-        """Checks if the response matches the grammatical rules for the chosen form."""
+        """Checks if the response matches the grammatical rules for the chosen 'porque'.
+
+        Args:
+          value: A string representing the response.
+
+        Returns:
+          True if the actual response contains exactly one variation of 'porque' 
+          and applies it with correct grammar; otherwise False.
+        """
         text = value.strip()
-        matches = list(self._ALL_VARIANTS_PATTERN.finditer(text))
+        pattern = r'(?i)\b(porque|porquê|porquês|por\s+que|por\s+quê)\b'
+        matches = list(re.finditer(pattern, text))
+        
         if len(matches) != 1:
             return False
+            
+        determiners = {
+            'o', 'os', 'um', 'uns', 'do', 'dos', 'no', 'nos', 'ao', 'aos',
+            'este', 'esse', 'aquele', 'meu', 'seu', 'nosso',
+            'algum', 'nenhum', 'todo', 'cada', 'qual', 'tal'
+        }
 
+        relative_nouns = {
+            'motivo', 'razão', 'razao', 'causa', 'explicação', 'explicacao',
+            'caminho', 'modo', 'forma', 'maneira', 'meio'
+        }
+        
         match = matches[0]
-        word = self._normalize_match(match.group())
+        word = re.sub(r'\s+', ' ', match.group().lower())
         start, end = match.span()
-        sentence, local_start, local_end = self._get_sentence_window(text, start, end)
-        prefix = sentence[:local_start]
-        suffix = sentence[local_end:]
-        previous_words = re.findall(r"\b\w+\b", prefix.lower(), flags=re.UNICODE)
-        previous_word = previous_words[-1] if previous_words else ""
-        next_char = self._next_non_space_char(suffix)
-        sentence_has_question_mark = "?" in sentence
-        sentence_initial = re.search(r"\w", prefix, flags=re.UNICODE) is None
-        phrase_final = re.search(r"\w", suffix, flags=re.UNICODE) is None
+        
+        text_before_match = text[:start]
+        sentences = re.split(r'(?<=[.!?])\s*', text)
+        sentence_index = len(re.findall(r'[.!?]\s*', text_before_match))
+        
+        current_sentence = sentences[sentence_index] if sentence_index < len(sentences) else text
+        
+        text_after = text[end:].lstrip()
+        next_char = text_after[0] if text_after else ''
+        
+        prev_words = re.findall(r'\b\w+\b', text_before_match.rstrip())
+        prev_word = prev_words[-1].lower() if prev_words else ''
 
-        if self._porque_type == "porque":
-            if word != "porque":
-                return False
-            if previous_word in self._DETERMINERS:
-                return False
-            if phrase_final:
-                return False
-            if sentence_initial and sentence_has_question_mark:
-                return False
-            return True
+        if self._porque_type == "porque" and word != "porque":
+            return False
+        elif self._porque_type == "porquê" and word not in ["porquê", "porquês"]:
+            return False
+        elif self._porque_type == "por que" and word != "por que":
+            return False
+        elif self._porque_type == "por quê" and word != "por quê":
+            return False
 
-        if self._porque_type == "porquê":
-            if word not in {"porquê", "porquês"}:
-                return False
-            return previous_word in self._DETERMINERS
+        if word == "por que":
+            if current_sentence.strip().endswith('?'):
+                pass
+            else:
+                if prev_word not in relative_nouns:
+                    return False
 
-        if self._porque_type == "por que":
-            if word != "por que":
+        elif word == "porque":
+            if prev_word in determiners:
                 return False
-            if previous_word in self._DETERMINERS:
+            if current_sentence.strip().endswith('?'):
                 return False
-            if phrase_final:
-                return False
-            if sentence_has_question_mark:
-                return True
-            if previous_word in self._RELATIVE_NOUNS:
-                return True
-            return self._has_indirect_question_context(previous_words)
 
-        if self._porque_type == "por quê":
-            if word != "por quê":
+        elif word == "por quê":
+            if next_char not in ['.', '?', '!', ',', ':', ';', ')']:
                 return False
-            return next_char == "" or next_char in self._ALLOWED_AFTER_POR_QUE
 
-        return False
+        elif word in ["porquê", "porquês"]:
+            if prev_word not in determiners:
+                return False
+                
+        return True
