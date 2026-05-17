@@ -214,7 +214,7 @@ def run_multilang_inference(
 
             # No vLLM, max_model_len define o contexto total (Prompt + Resposta)
             # Se o usuário não passou argumento, usamos o detectado
-            vllm_len = max_len if max_len > 4096 else model_max_context
+            vllm_len = min(max_len, model_max_context) if max_len > 0 else model_max_context
 
             try:
                 llm_engine = LLM(
