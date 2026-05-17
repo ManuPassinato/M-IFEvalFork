@@ -235,7 +235,7 @@ PT_INSTRUCTION_DICT = {
     _FORMAT + "number_bullet_lists": pt_instructions.BulletListChecker,
     # TODO(jeffreyzhou): Pre-create paragraph or use prompt to replace
     # _CONTENT + "rephrase_paragraph": instructions.RephraseParagraph,
-    # _FORMAT + "constrained_response": pt_instructions.ConstrainedResponseChecker, TODO
+    _FORMAT + "constrained_response": pt_instructions.ConstrainedResponseChecker,
     _FORMAT + "number_highlighted_sections": (
         pt_instructions.HighlightSectionChecker),
     _FORMAT + "multiple_sections": pt_instructions.SectionChecker,
@@ -246,14 +246,21 @@ PT_INSTRUCTION_DICT = {
     # TODO(tianjianlu): Re-enable with specific prompts.
     # _MULTITURN + "constrained_start": instructions.ConstrainedStartChecker,
     _COMBINATION + "two_responses": pt_instructions.TwoResponsesChecker,
-    # _COMBINATION + "repeat_prompt": pt_instructions.RepeatPromptThenAnswer, TODO
+    _COMBINATION + "repeat_prompt": pt_instructions.RepeatPromptThenAnswer,
     _STARTEND + "end_checker": pt_instructions.EndChecker,
     _CHANGE_CASES
     + "capital_word_frequency": pt_instructions.CapitalWordFrequencyChecker,
+    # NOTE: "english_capital/lowercase" are legacy names for Portuguese checkers
+    # Kept for backward compatibility with existing datasets
     _CHANGE_CASES
     + "english_capital": pt_instructions.CapitalLettersPortugueseChecker,
     _CHANGE_CASES
     + "english_lowercase": pt_instructions.LowercaseLettersPortugueseChecker,
+    # New correct names for Portuguese-specific checkers
+    _CHANGE_CASES
+    + "portuguese_capital": pt_instructions.CapitalLettersPortugueseChecker,
+    _CHANGE_CASES
+    + "portuguese_lowercase": pt_instructions.LowercaseLettersPortugueseChecker,
     _PUNCTUATION + "no_comma": pt_instructions.CommaChecker,
     _PUNCTUATION + "no_tilde": pt_instructions.NoTildeChecker,
     _PUNCTUATION + "crase_presence": pt_instructions.CrasePresenceChecker,
