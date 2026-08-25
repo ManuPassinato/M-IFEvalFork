@@ -256,6 +256,6 @@ class MIFEvalAnalyzer:
         print("Todos os gráficos e tabelas foram gerados.")
 
 if __name__ == "__main__":
-    analyzer = MIFEvalAnalyzer(folder_name='evaluations', target_lang='pt')
+    analyzer = MIFEvalAnalyzer(folder_name=os.path.join('experiments', 'evaluations'), target_lang='pt')
     analyzer.load_data()
     analyzer.generate_outputs()

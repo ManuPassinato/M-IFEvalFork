@@ -55,6 +55,11 @@ The table below presents the average scores across all instructions for each lan
 
 ## ⚙️ How to run
 
+Benchmark input datasets live in `data/`. Generated responses and evaluation
+outputs are centralized in `experiments/`; see `experiments/README.md` for the
+current campaign map. The canonical Portuguese benchmark is
+`data/pt_input_data.jsonl` and contains 535 prompts.
+
 ### With Colab 🌐
 
 We provide a Jupyter Notebook designed to run seamlessly in Google Colab. This notebook guides you through:
@@ -139,7 +144,7 @@ Or, you can use `get_responses.py` to automatically generate the JSONL file in t
   Once the model is added, generate responses by running:  
   
     ```bash
-    python3 -m get_responses.py --model_name {model_name}
+    python3 get_responses.py --model_name {model_name}
     ```  
 
   Replace `{model_name}` with the exact model identifier you added.
@@ -172,8 +177,8 @@ Once you have the JSONL file ready, run the evaluation script:
 ```bash
 python3 -m evaluation_main \
   --input_data=./data/{lang}_input_data.jsonl \
-  --input_response_data=./data/input_response_data_model_name.jsonl \
-  --output_dir=./evaluation/
+  --input_response_data=./experiments/generated_responses/input_response_data_model_name.jsonl \
+  --output_dir=./experiments/generated_evaluations/model_name/
 ```
 - Replace `{lang}` with the language tag corresponding to the language you wish to evaluate (e.g., `en` for English, `fr` for French).
 - Update `input_response_data` with the path to your model's response JSONL file.

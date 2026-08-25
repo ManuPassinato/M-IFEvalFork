@@ -1,17 +1,22 @@
 import os
 import argparse
-import torch
 import gc
 import sys
 import traceback
 import re
 import importlib.util
-from datasets import load_dataset
-from transformers import AutoTokenizer, GenerationConfig, pipeline
+import json
+from pathlib import Path
 
 HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
 DEFAULT_MAX_NEW_TOKENS = 32768
 DEFAULT_BATCH_SIZE = 4
+PROJECT_DIR = Path(__file__).resolve().parent
+DEFAULT_OUTPUT_DIR = PROJECT_DIR / "experiments" / "generated_responses"
+DATASET_INPUTS = {
+    "pt": PROJECT_DIR / "data" / "pt_input_data.jsonl",
+    "pten": PROJECT_DIR / "experiments" / "data_close" / "pten_input_data.jsonl",
+}
 
 def configure_pipeline_for_batching(hf_pipeline, tokenizer):
     """Configura pad token para evitar warnings de padding."""
@@ -25,6 +30,8 @@ def configure_pipeline_for_batching(hf_pipeline, tokenizer):
                 tokenizer.pad_token = tokenizer.eos_token
 
 def build_generation_config(tokenizer, is_qwen_3, max_generation_tokens):
+    from transformers import GenerationConfig
+
     gen_cfg = GenerationConfig()
     gen_cfg.max_new_tokens = max_generation_tokens
     gen_cfg.max_length = None
@@ -45,7 +52,7 @@ try:
     VLLM_AVAILABLE = True
 except ImportError:
     VLLM_AVAILABLE = False
-    print("⚠️ Aviso: vLLM não encontrado. O script rodará apenas em modo Transformers.")
+    print("Aviso: vLLM nao encontrado; o modo Transformers sera usado se a inferencia for executada.")
 
 # --- A FUNÇÃO DE LIMPEZA DEFINITIVA (V8 - NUCLEAR) ---
 def clean_response(text, stop_tokens_str):
@@ -123,6 +130,9 @@ def clean_response(text, stop_tokens_str):
     return text.strip()
 
 def build_transformers_pipeline(model_name, tokenizer, use_8bit):
+    import torch
+    from transformers import pipeline
+
     model_kwargs = {"dtype": torch.bfloat16}
     if use_8bit:
         model_kwargs["load_in_8bit"] = True
@@ -137,44 +147,58 @@ def build_transformers_pipeline(model_name, tokenizer, use_8bit):
     configure_pipeline_for_batching(hf_pipeline, tokenizer)
     return hf_pipeline
 
-def resolve_data_dir(data_dir):
-    if data_dir:
-        return data_dir
-    possible = [
-        "M-IFEvalFork/data",
-        "data",
-        os.path.join(os.getcwd(), "data"),
-        "M-IFEvalFork/data_new",
-        "data_new",
-        os.path.join(os.getcwd(), "data_new"),
-    ]
-    for path in possible:
-        if os.path.exists(path):
-            return path
-    return None
+def resolve_input_path(dataset, input_dir=None):
+    """Retorna o input canônico de ``pt`` ou ``pten``.
+
+    ``input_dir`` permite uma sobreposição local, mas os valores padrão são
+    sempre os arquivos versionados no repositório.
+    """
+    if input_dir is not None:
+        candidate = Path(input_dir) / f"{dataset}_input_data.jsonl"
+        if candidate.exists():
+            return candidate
+
+    input_path = DATASET_INPUTS[dataset]
+    if input_path.exists():
+        return input_path
+    raise FileNotFoundError(f"Dataset '{dataset}' não encontrado: {input_path}")
+
+
+def describe_datasets(datasets, input_dir=None):
+    """Valida e descreve os inputs sem carregar um modelo."""
+    for dataset in datasets:
+        input_path = resolve_input_path(dataset, input_dir)
+        with input_path.open(encoding="utf-8") as input_file:
+            prompt_count = sum(1 for line in input_file if line.strip())
+        print(f"{dataset}: {prompt_count} prompts | input: {input_path}")
 
 # --- FUNÇÃO PRINCIPAL ---
 def run_multilang_inference(
     model_name,
     gpu_util,
     max_len,
-    data_dir=None,
+    output_dir=DEFAULT_OUTPUT_DIR,
+    input_dir=None,
     use_8bit=False,
-    languages=None,
+    datasets=None,
     max_new_tokens=DEFAULT_MAX_NEW_TOKENS,
     batch_size=DEFAULT_BATCH_SIZE,
 ):
-    if languages is None:
-        languages = ["pt"]
-    print(f"\n[WORKER] Iniciando Ciclo Multi-Idioma para: {model_name}")
+    import torch
+    from datasets import load_dataset
+    from transformers import AutoTokenizer
+
+    if datasets is None:
+        datasets = ["pt"]
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\n[WORKER] Iniciando inferência para: {model_name}")
+    print(f"Datasets: {', '.join(datasets)}")
+    print(f"Saída: {output_dir}")
 
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
     if gpu_util > 0.95: gpu_util = 0.95
     gc.collect(); torch.cuda.empty_cache()
-
-    data_dir = resolve_data_dir(data_dir)
-    if not data_dir:
-        sys.exit("❌ Pasta data não encontrada")
 
     # --- DETECÇÃO ---
     model_lower = model_name.lower()
@@ -234,21 +258,12 @@ def run_multilang_inference(
     except Exception as e:
         sys.exit(f"❌ Erro Fatal: {e}")
 
-    for lang in languages:
-        print(f"\n>>> Processando: {lang.upper()}")
-        input_file = f"{lang}_input_data.jsonl"
-        input_path = os.path.join(data_dir, input_file)
-
-        if not os.path.exists(input_path):
-            project_dir = os.path.dirname(os.path.abspath(__file__))
-            fallback_inputs = [
-                os.path.join(project_dir, "data", input_file),
-                os.path.join(os.getcwd(), "data", input_file),
-            ]
-            input_path = next((p for p in fallback_inputs if os.path.exists(p)), input_path)
-
-        if not os.path.exists(input_path):
-            print(f"⚠️ Sem input para {lang}: {input_file} não encontrado em {data_dir} nem em data/")
+    for dataset in datasets:
+        print(f"\n>>> Processando: {dataset.upper()}")
+        try:
+            input_path = resolve_input_path(dataset, input_dir)
+        except FileNotFoundError as error:
+            print(f"⚠️ {error}")
             continue
 
         try:
@@ -350,7 +365,7 @@ def run_multilang_inference(
 
             # Salvar
             safe_model = model_name.replace('/', '__')
-            output_filename = os.path.join(data_dir, f"{lang}_input_response_data_{safe_model}.jsonl")
+            output_filename = output_dir / f"{dataset}_input_response_data_{safe_model}.jsonl"
             if "response" in ds.column_names: ds = ds.remove_columns("response")
             ds = ds.add_column("response", generated_text)
             ds.select_columns([prompt_col, "response"]).to_json(output_filename, force_ascii=False)
@@ -358,20 +373,40 @@ def run_multilang_inference(
             torch.cuda.empty_cache()
 
         except Exception as e:
-            print(f"❌ Erro {lang}: {e}"); traceback.print_exc()
+            print(f"❌ Erro {dataset}: {e}"); traceback.print_exc()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Gera respostas para os datasets canônicos pt (535) e pten (541)."
+    )
     parser.add_argument("--model_name", type=str, required=True)
     parser.add_argument("--gpu_memory_utilization", type=float, default=0.90)
     parser.add_argument("--max_model_len", type=int, default=8096)
-    parser.add_argument("--data_dir", type=str, default=None)
+    parser.add_argument(
+        "--output-dir", "--data_dir", dest="output_dir", type=Path,
+        default=DEFAULT_OUTPUT_DIR,
+        help="Pasta para respostas; não é usada como fonte dos inputs.",
+    )
+    parser.add_argument(
+        "--input-dir", type=Path, default=None,
+        help="Sobrepõe os inputs com <pasta>/<dataset>_input_data.jsonl.",
+    )
     parser.add_argument("--load_in_8bit", action="store_true")
-    parser.add_argument("--languages", type=str, nargs="+", default=["en"])
+    parser.add_argument(
+        "--datasets", "--languages", dest="datasets", nargs="+", choices=tuple(DATASET_INPUTS),
+        default=["pt"], help="pt e/ou pten.",
+    )
     parser.add_argument("--max_new_tokens", type=int, default=DEFAULT_MAX_NEW_TOKENS)
     parser.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
+    parser.add_argument("--dry-run", action="store_true", help="Valida os datasets sem carregar o modelo.")
     args = parser.parse_args()
+    if args.dry_run:
+        print(f"Modelo: {args.model_name}")
+        print(f"Saída prevista: {args.output_dir}")
+        describe_datasets(args.datasets, args.input_dir)
+        sys.exit(0)
     run_multilang_inference(
         args.model_name, args.gpu_memory_utilization, args.max_model_len,
-        args.data_dir, args.load_in_8bit, args.languages, args.max_new_tokens, args.batch_size
+        args.output_dir, args.input_dir, args.load_in_8bit, args.datasets,
+        args.max_new_tokens, args.batch_size
     )

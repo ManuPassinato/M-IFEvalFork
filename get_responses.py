@@ -192,13 +192,16 @@ MODEL_CLASS_DICT = {
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_name", type=str, required=True)
+    parser.add_argument("--input_dir", default="./data")
+    parser.add_argument("--output_dir", default="./experiments/generated_responses")
     args = parser.parse_args()
 
     model_name = args.model_name
 
     assert model_name in SUPPORTED_MODELS, f"Model {model_name} not supported, update SUPPORTED_MODELS dictionary in get_responses.py to support it."
 
-    paths = sorted(glob("./data/*_input_data.jsonl"))
+    paths = sorted(glob(os.path.join(args.input_dir, "*_input_data.jsonl")))
+    os.makedirs(args.output_dir, exist_ok=True)
 
     model_class = MODEL_CLASS_DICT[SUPPORTED_MODELS[model_name]]
     response_generator = model_class(model_name)
@@ -207,6 +210,13 @@ if __name__ == "__main__":
         print(path + " - " + model_name)
         ds = load_dataset("json", data_files={"train": path}, split="train")
         ds = ds.add_column("response", response_generator.get_response(ds["prompt"]))
+        input_name = os.path.basename(path)
+        output_name = (
+            input_name[:-10]
+            + "response_data_"
+            + model_name.replace("/", "__")
+            + ".jsonl"
+        )
         ds.select_columns(["prompt", "response"]).to_json(
-            path[:-10] + "response_data_" + model_name.replace("/", "__") + ".jsonl"
+            os.path.join(args.output_dir, output_name)
         )

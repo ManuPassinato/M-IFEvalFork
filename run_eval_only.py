@@ -1,107 +1,159 @@
-import os
-import re
-import sys
-import shutil
-import subprocess
+"""Evaluate Portuguese (PT) and translated-Portuguese (PTEN) response files."""
+
+from __future__ import annotations
+
 import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
 
 
-def discover_response_files(data_new_dir):
-    if not os.path.isdir(data_new_dir):
+PROJECT_DIR = Path(__file__).resolve().parent
+DEFAULT_RESPONSES_DIR = PROJECT_DIR / "experiments" / "generated_responses"
+DEFAULT_EVALUATIONS_DIR = PROJECT_DIR / "experiments" / "generated_evaluations"
+DEFAULT_PT_INPUT = PROJECT_DIR / "data" / "pt_input_data.jsonl"
+DEFAULT_PTEN_INPUT = PROJECT_DIR / "experiments" / "data_close" / "pten_input_data.jsonl"
+
+LANGUAGE_ALIASES = {"pt": "pt", "pten": "pten", "pt_en": "pten"}
+
+
+def discover_response_files(responses_dir: Path) -> list[Path]:
+    if not responses_dir.is_dir():
         return []
     return sorted(
-        os.path.join(data_new_dir, f)
-        for f in os.listdir(data_new_dir)
-        if f.endswith(".jsonl") and "_input_response_data_" in f
+        path
+        for path in responses_dir.iterdir()
+        if path.is_file() and path.suffix == ".jsonl" and "_input_response_data_" in path.name
     )
 
 
-def parse_lang_and_model(filename):
-    match = re.match(r"^([a-z]{2})_input_response_data_(.+)\.jsonl$", filename)
-    if not match:
+def parse_language_and_model(path: Path) -> tuple[str | None, str | None]:
+    prefix, marker, model_name = path.stem.partition("_input_response_data_")
+    if not marker or not model_name:
         return None, None
-    return match.group(1), match.group(2)
+    return LANGUAGE_ALIASES.get(prefix), model_name
 
 
-def resolve_input_data(data_dir, lang):
-    final_clean = os.path.join(data_dir, f"{lang}_input_data_FINAL_CLEAN.jsonl")
-    fallback = os.path.join(data_dir, f"{lang}_input_data.jsonl")
-    if os.path.exists(final_clean):
-        return final_clean
-    if os.path.exists(fallback):
-        return fallback
-    return None
+def load_prompts(path: Path) -> set[str]:
+    prompts: set[str] = set()
+    with path.open("r", encoding="utf-8") as stream:
+        for line_number, line in enumerate(stream, start=1):
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            prompt = record.get("prompt")
+            if not isinstance(prompt, str):
+                raise ValueError(f"{path}:{line_number}: missing prompt")
+            prompts.add(prompt)
+    if not prompts:
+        raise ValueError(f"No prompts found in {path}")
+    return prompts
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Run evaluations for all response files in data_new")
-    parser.add_argument("--project_dir", default=os.path.dirname(os.path.abspath(__file__)))
-    parser.add_argument("--data_new_dir", default=None)
-    parser.add_argument("--data_dir", default=None)
-    parser.add_argument("--evaluations_dir", default=None)
+def validate_response_coverage(input_data: Path, response_data: Path) -> int:
+    required_prompts = load_prompts(input_data)
+    response_prompts = load_prompts(response_data)
+    missing_prompts = required_prompts - response_prompts
+    if missing_prompts:
+        raise ValueError(
+            f"{response_data} is missing {len(missing_prompts)} prompts required by {input_data}"
+        )
+    return len(required_prompts)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Evaluate PT and PTEN response files stored in one directory."
+    )
+    parser.add_argument("--project-dir", type=Path, default=PROJECT_DIR)
+    parser.add_argument(
+        "--responses-dir",
+        "--data-new-dir",
+        dest="responses_dir",
+        type=Path,
+        default=DEFAULT_RESPONSES_DIR,
+    )
+    parser.add_argument(
+        "--evaluations-dir", type=Path, default=DEFAULT_EVALUATIONS_DIR
+    )
+    parser.add_argument("--pt-input-data", type=Path, default=DEFAULT_PT_INPUT)
+    parser.add_argument("--pten-input-data", type=Path, default=DEFAULT_PTEN_INPUT)
+    parser.add_argument(
+        "--languages",
+        nargs="+",
+        choices=("pt", "pten"),
+        default=("pt", "pten"),
+        help="Languages to evaluate (default: pt pten).",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate input/response coverage and print planned evaluations without running them.",
+    )
     args = parser.parse_args()
 
-    project_dir = os.path.abspath(args.project_dir)
-    data_new_dir = args.data_new_dir or os.path.join(project_dir, "data_new")
-    data_dir = args.data_dir or os.path.join(project_dir, "data")
-    evaluations_dir = args.evaluations_dir or os.path.join(project_dir, "eval_new")
-    eval_script = os.path.join(project_dir, "evaluation_main.py")
-
-    if not os.path.exists(eval_script):
+    project_dir = args.project_dir.resolve()
+    eval_script = project_dir / "evaluation_main.py"
+    if not eval_script.is_file():
         raise FileNotFoundError(f"evaluation_main.py not found in: {project_dir}")
 
-    if os.path.isdir(evaluations_dir):
-        shutil.rmtree(evaluations_dir)
-    os.makedirs(evaluations_dir, exist_ok=True)
+    input_by_language = {"pt": args.pt_input_data, "pten": args.pten_input_data}
+    for language in args.languages:
+        if not input_by_language[language].is_file():
+            raise FileNotFoundError(
+                f"Input data for {language.upper()} not found: {input_by_language[language]}"
+            )
 
-    response_files = discover_response_files(data_new_dir)
-    if not response_files:
-        print(f"No response files found in: {data_new_dir}")
+    response_files = discover_response_files(args.responses_dir)
+    selected_files = []
+    for response_path in response_files:
+        language, model_name = parse_language_and_model(response_path)
+        if language is None:
+            print(f"Skipping unrecognized file name: {response_path.name}")
+        elif language in args.languages:
+            selected_files.append((response_path, language, model_name))
+
+    if not selected_files:
+        requested = ", ".join(args.languages)
+        print(f"No {requested.upper()} response files found in: {args.responses_dir}")
         return
 
-    failures = []
+    args.evaluations_dir.mkdir(parents=True, exist_ok=True)
+    failures: list[tuple[Path, str]] = []
 
-    for resp_path in response_files:
-        filename = os.path.basename(resp_path)
-        lang, safe_model_name = parse_lang_and_model(filename)
-        if not lang:
-            print(f"Skipping unrecognized file name: {filename}")
-            continue
-
-        input_data = resolve_input_data(data_dir, lang)
-        if not input_data:
-            failures.append((filename, f"missing input data for lang '{lang}'"))
-            print(f"Missing input data for {lang}: {filename}")
-            continue
-
-        output_dir = os.path.join(evaluations_dir, f"{lang}_input_response_data_{safe_model_name}")
-        cmd = [
-            sys.executable,
-            eval_script,
-            "--input_data",
-            input_data,
-            "--input_response_data",
-            resp_path,
-            "--output_dir",
-            output_dir,
-        ]
-
-        print(f"Evaluating: {filename}")
+    for response_path, language, model_name in selected_files:
+        input_data = input_by_language[language]
+        output_dir = args.evaluations_dir / response_path.stem
         try:
-            subprocess.run(cmd, check=True)
-            print(f"OK: {filename}")
-        except subprocess.CalledProcessError as exc:
-            failures.append((filename, str(exc)))
-            print(f"FAIL: {filename}")
+            prompt_count = validate_response_coverage(input_data, response_path)
+            command = [
+                sys.executable,
+                str(eval_script),
+                "--input_data",
+                str(input_data),
+                "--input_response_data",
+                str(response_path),
+                "--output_dir",
+                str(output_dir),
+            ]
+            print(
+                f"{language.upper()} | {model_name} | {prompt_count} prompts | "
+                f"{response_path.name}"
+            )
+            if args.dry_run:
+                continue
+            subprocess.run(command, check=True)
+            print(f"OK: {response_path.name}")
+        except (OSError, ValueError, subprocess.CalledProcessError) as error:
+            message = str(error)
+            if response_path.name.startswith("pt_en_input_response_data_"):
+                message += " Use --pten-input-data with the matching legacy input dataset."
+            failures.append((response_path, message))
+            print(f"FAIL: {response_path.name}: {message}")
 
-    print("\nDone.")
-    print(f"Total files: {len(response_files)}")
-    print(f"Failures: {len(failures)}")
-
+    print(f"\nEvaluated files: {len(selected_files) - len(failures)}/{len(selected_files)}")
     if failures:
-        print("\nFailed files:")
-        for filename, reason in failures:
-            print(f"- {filename}: {reason}")
         sys.exit(1)
 
 
