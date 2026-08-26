@@ -631,7 +631,10 @@ class PostscriptChecker(Instruction):
     """
     value = value.lower()
     if self._postscript_marker == "OBS.":
-      postscript_pattern = r"\s*p\.\s?p\.\s?s.*$"
+      # ``OBS.`` is the Portuguese abbreviation for observação.  The previous
+      # pattern accidentally looked for ``P.P.S.``, causing valid responses
+      # beginning with ``OBS:`` or ``OBS.`` to be rejected.
+      postscript_pattern = r"^\s*obs\b\.?\s*:?\s*\S.*$"
     elif self._postscript_marker == "P.S.":
       postscript_pattern = r"\s*p\.\s?s\..*$"
     elif self._postscript_marker == "Nota":
