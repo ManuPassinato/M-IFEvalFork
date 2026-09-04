@@ -1,3 +1,9 @@
+
+from config import load_config, project_path
+CONFIG = load_config('inference')
+CFG = CONFIG['get_responses']
+IO = CONFIG["io"]
+
 # coding=utf-8
 # Copyright 2025 The Lightblue Authors.
 #
@@ -33,7 +39,7 @@ class AnthropicResponseGenerator(ResponseGenerator):
     def __init__(self, model_name):
         import anthropic
         self.anthropic_client = anthropic.Anthropic(
-            api_key=os.environ["ANTHROPIC_API_KEY"],
+            api_key=os.environ[CFG['anthropic_key_env']],
         )
         self.model_name = model_name
     
@@ -41,11 +47,11 @@ class AnthropicResponseGenerator(ResponseGenerator):
         return [
             self.anthropic_client.messages.create(
                 model=self.model_name,
-                max_tokens=2048,
-                temperature=0,
+                max_tokens=CFG['anthropic_max_tokens'],
+                temperature=CFG['anthropic_temperature'],
                 messages=[
                     {
-                        "role": "user",
+                        "role": CFG['message_role'],
                         "content": [
                             {
                                 "type": "text",
@@ -63,7 +69,7 @@ class OpenaiResponseGenerator(ResponseGenerator):
     def __init__(self, model_name):
         from openai import OpenAI
 
-        self.openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        self.openai_client = OpenAI(api_key=os.environ[CFG['openai_key_env']])
         self.model_name = model_name
     
     def get_single_response(self, input_text):
@@ -72,7 +78,7 @@ class OpenaiResponseGenerator(ResponseGenerator):
                 model=self.model_name,
                 messages=[
                     {
-                    "role": "user",
+                    "role": CFG['message_role'],
                     "content": [
                         {
                         "type": "text",
@@ -140,47 +146,23 @@ class VllmResponseGenerator(ResponseGenerator):
     def __init__(self, model_name):
         from vllm import LLM, SamplingParams
         self.model_name = model_name
-        self.llm = LLM(model=self.model_name, max_model_len=os.environ.get("MAX_MODEL_LEN", 4096))
-        self.sampling_params = SamplingParams(temperature=0.0, max_tokens=2048)
+        self.llm = LLM(model=self.model_name, max_model_len=os.environ.get(CFG['max_model_len_env'], CFG['vllm_max_model_len']))
+        self.sampling_params = SamplingParams(temperature=CFG['vllm_temperature'], max_tokens=CFG['vllm_max_tokens'])
 
     def get_response(self, input_texts):
         input_conversations = [[{
-            "role": "user",
+            "role": CFG['message_role'],
             "content": input_text
         }] for input_text in input_texts]
 
         outputs = self.llm.chat(input_conversations,
                    sampling_params=self.sampling_params,
-                   use_tqdm=True)
+                   use_tqdm=CFG['use_progress_bar'])
         return [output.outputs[0].text for output in outputs]
 
 ######## Main ########
 
-SUPPORTED_MODELS = {
-    'gpt-4o-mini-2024-07-18': 'openai',
-    'gpt-4o-2024-08-06': 'openai',
-    'o1-preview-2024-09-12': 'openai',
-    'o1-mini-2024-09-12': 'openai',
-    'claude-3-haiku-20240307': 'anthropic',
-    'claude-3-5-sonnet-20240620': 'anthropic',
-    'claude-3-opus-20240229': 'anthropic',
-    # 'gemini-1.5-pro-002': 'gemini',
-    # 'gemini-1.5-flash-002': 'gemini',
-    'CohereForAI/c4ai-command-r-plus-4bit': 'vllm',
-    'CohereForAI/c4ai-command-r-v01-4bit': 'vllm',
-    'CohereForAI/aya-23-8B': 'vllm',
-    'Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4': 'vllm',
-    'Qwen/Qwen2.5-1.5B-Instruct-GPTQ-Int4': 'vllm',
-    'Qwen/Qwen2.5-3B-Instruct-GPTQ-Int4': 'vllm',
-    'Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4': 'vllm',
-    'Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4': 'vllm',
-    'Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4': 'vllm',
-    'Qwen/Qwen2.5-72B-Instruct-GPTQ-Int4': 'vllm',
-    'hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4': 'vllm',
-    'hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4': 'vllm',
-    'mistralai/Mistral-7B-Instruct-v0.3': 'vllm',
-    'deepseek-ai/deepseek-llm-7b-chat': 'vllm'
-}
+SUPPORTED_MODELS = CFG['supported_models']
 
 MODEL_CLASS_DICT = {
     "openai": OpenaiResponseGenerator,
@@ -191,16 +173,17 @@ MODEL_CLASS_DICT = {
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--config", help="Stage YAML configuration file.")
     parser.add_argument("--model_name", type=str, required=True)
-    parser.add_argument("--input_dir", default="./data")
-    parser.add_argument("--output_dir", default="./experiments/generated_responses")
+    parser.add_argument("--input_dir", default=project_path(IO["data_dir"]))
+    parser.add_argument("--output_dir", default=project_path(IO["responses_dir"]))
     args = parser.parse_args()
 
     model_name = args.model_name
 
-    assert model_name in SUPPORTED_MODELS, f"Model {model_name} not supported, update SUPPORTED_MODELS dictionary in get_responses.py to support it."
+    assert model_name in SUPPORTED_MODELS, f"Model {model_name} not supported; update get_responses.supported_models in inference.yml."
 
-    paths = sorted(glob(os.path.join(args.input_dir, "*_input_data.jsonl")))
+    paths = sorted(glob(os.path.join(args.input_dir, CFG["input_glob"])))
     os.makedirs(args.output_dir, exist_ok=True)
 
     model_class = MODEL_CLASS_DICT[SUPPORTED_MODELS[model_name]]
@@ -211,11 +194,9 @@ if __name__ == "__main__":
         ds = load_dataset("json", data_files={"train": path}, split="train")
         ds = ds.add_column("response", response_generator.get_response(ds["prompt"]))
         input_name = os.path.basename(path)
-        output_name = (
-            input_name[:-10]
-            + "response_data_"
-            + model_name.replace("/", "__")
-            + ".jsonl"
+        output_name = IO["response_template"].format(
+            dataset=input_name[:-len(IO["input_template"].format(dataset=""))],
+            model=model_name.replace("/", "__"),
         )
         ds.select_columns(["prompt", "response"]).to_json(
             os.path.join(args.output_dir, output_name)

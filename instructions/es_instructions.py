@@ -14,6 +14,10 @@
 # limitations under the License.
 
 """Library of instructions."""
+
+from config import load_section
+CFG = load_section('data_gen', 'instruction_defaults', 'es')
+
 import collections
 import json
 import random
@@ -25,6 +29,7 @@ from absl import logging
 import langdetect
 import unicodedata
 import spacy
+NLP_CONFIG = load_section("metrics", "nlp")
 
 from instruction_utils import es_instructions_util
 
@@ -37,60 +42,57 @@ _LANGUAGES = es_instructions_util.LANGUAGE_CODES
 _COMPARISON_RELATION = ("al menos", "como máximo")
 
 #The maximum number of sentences.
-_MAX_NUM_SENTENCES = 20
+_MAX_NUM_SENTENCES = CFG['max_num_sentences']
 
 #The number of placeholders.
-_NUM_PLACEHOLDERS = 4
+_NUM_PLACEHOLDERS = CFG['num_placeholders']
 
 #The number of bullet lists.
-_NUM_BULLETS = 5
+_NUM_BULLETS = CFG['num_bullets']
 
 #The options of constrained response.
 _CONSTRAINED_RESPONSE_OPTIONS = (
     "Sí.", "No.", "Quizás.")
 
 #The options of starter keywords.
-_STARTER_OPTIONS = ("Diría que", "Mi respuesta es", "Creo que",
-                    "En mi opinión", "Desde mi punto de vista",
-                    "El", "La", "Eso", "Un", "Una", "Para", "Por",
-                    "Entonces", "Ella", "Él")
+_STARTER_OPTIONS = tuple(CFG['starter_options'])
 
 # The options of ending keywords.
 # TODO(jeffreyzhou) add more ending options
-_ENDING_OPTIONS = ("Un saludo", "¿Necesitas algo más?", "Quedo pendiente de la siguiente consulta")
+_ENDING_OPTIONS = tuple(CFG['ending_options'])
 
 #The number of highlighted sections.
-_NUM_HIGHLIGHTED_SECTIONS = 4
+_NUM_HIGHLIGHTED_SECTIONS = CFG['num_highlighted_sections']
 
 #The section spliter.
-_SECTION_SPLITER = ("Sección", "SECCIÓN")
+_SECTION_SPLITER = tuple(CFG['section_spliter'])
 
 #The number of sections.
-_NUM_SECTIONS = 5
+_NUM_SECTIONS = CFG['num_sections']
 
 #The number of paragraphs.
-_NUM_PARAGRAPHS = 5
+_NUM_PARAGRAPHS = CFG['num_paragraphs']
 
 #The postscript marker.
-_POSTSCRIPT_MARKER = ("P.D.", "Nota")
+_POSTSCRIPT_MARKER = tuple(CFG['postscript_marker'])
 
 #The number of keywords.
-_NUM_KEYWORDS = 2
+_NUM_KEYWORDS = CFG['num_keywords']
 
 #The occurrences of a single keyword.
-_KEYWORD_FREQUENCY = 3
+_KEYWORD_FREQUENCY = CFG['keyword_frequency']
 
 #The occurrences of a single letter.
-_LETTER_FREQUENCY = 20
+_LETTER_FREQUENCY = CFG['letter_frequency']
 
 #The occurrences of words with all  letters.
-_ALL__WORD_FREQUENCY = 20
+_ALL__WORD_FREQUENCY = CFG['all__word_frequency']
 
 #The number of words in the response.
-_NUM_WORDS_LOWER_LIMIT = 1
-_NUM_WORDS_UPPER_LIMIT = 500
+_NUM_WORDS_LOWER_LIMIT = CFG['num_words_lower_limit']
+_NUM_WORDS_UPPER_LIMIT = CFG['num_words_upper_limit']
 
-multilingual_nlp = spacy.load("xx_sent_ud_sm")
+multilingual_nlp = spacy.load(NLP_CONFIG["multilingual_sentence_model"])
 
 class Instruction:
   """An instruction template."""

@@ -1,3 +1,8 @@
+
+from config import load_config, project_path
+CONFIG = load_config('metrics')
+CFG = CONFIG['tables']
+
 import os
 import json
 import pandas as pd
@@ -5,13 +10,15 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from collections import Counter
 
-sns.set_theme(style="whitegrid")
-plt.rcParams.update({'font.size': 12})
-pd.options.display.max_colwidth = 100
-pd.options.display.float_format = '{:.1f}'.format
+sns.set_theme(style=CFG['seaborn_theme'])
+plt.rcParams.update({'font.size': CFG['font_size']})
+pd.options.display.max_colwidth = CFG['dataframe_max_column_width']
+pd.options.display.float_format = CFG['float_format'].format
 
 class MIFEvalAnalyzer:
-    def __init__(self, folder_name='evaluations', target_lang='en'):
+    def __init__(self, folder_name=None, target_lang=CFG['constructor_language']):
+        if folder_name is None:
+            folder_name = project_path(CONFIG['paths']['report_evaluations'])
         script_location = os.path.dirname(os.path.abspath(__file__))
         self.evaluations_path = os.path.join(script_location, folder_name)
         self.target_lang = target_lang
@@ -47,7 +54,7 @@ class MIFEvalAnalyzer:
         found_files = []
         for root, dirs, files in os.walk(self.evaluations_path):
             for file in files:
-                if file.lower().endswith('.jsonl') or file.lower().endswith('.json'):
+                if any(file.lower().endswith(ext) for ext in CFG['accepted_extensions']):
                     found_files.append(os.path.join(root, file))
 
         if not found_files:
@@ -66,12 +73,14 @@ class MIFEvalAnalyzer:
             if folder_name != os.path.basename(self.evaluations_path):
                 raw_name = folder_name
 
-            if "input_response_data_" in raw_name:
-                model_name = raw_name.split("input_response_data_")[-1]
+            if CONFIG["io"]["response_marker"].lstrip("_") in raw_name:
+                model_name = raw_name.split(CONFIG["io"]["response_marker"].lstrip("_"))[-1]
             else:
-                model_name = raw_name.replace('_results', '').replace('results_', '')
+                model_name = raw_name
+                for token in CFG['removable_model_tokens']:
+                    model_name = model_name.replace(token, '')
             
-            if len(model_name) > 30: model_name = model_name[:27] + "..."
+            if len(model_name) > CFG["maximum_model_length"]: model_name = model_name[:CFG["truncated_model_length"]] + CFG["model_suffix"]
 
             try:
                 data = []
@@ -148,7 +157,7 @@ class MIFEvalAnalyzer:
         
         print(f"\n[{title.upper()}]")
         print(pivot.to_string())
-        pivot.to_csv(filename)
+        pivot.to_csv(project_path(CONFIG["paths"]["report_output_dir"]) / filename)
         print(f"Salvo: {filename}")
 
     def generate_outputs(self):
@@ -157,25 +166,25 @@ class MIFEvalAnalyzer:
         # Tabela 1: Prompt-level Strict
         self._generate_pivot_table(
             self.df_all_prompts, 'Strict Pass', 
-            'table_1_prompt_strict.csv', 'Table 1: Prompt-level Strict Accuracy'
+            CFG['prompt_strict_csv'], 'Table 1: Prompt-level Strict Accuracy'
         )
 
         # Tabela 2: Instruction-level Strict (A Média de acerto das instruções individuais)
         self._generate_pivot_table(
             self.df_all_instructions, 'Strict Passed', 
-            'table_2_instruction_strict.csv', 'Table 2: Instruction-level Strict Accuracy'
+            CFG['instruction_strict_csv'], 'Table 2: Instruction-level Strict Accuracy'
         )
 
         # Tabela 6: Instruction-level Loose (A Média de acerto loose das instruções)
         self._generate_pivot_table(
             self.df_all_instructions, 'Loose Passed', 
-            'table_6_instruction_loose.csv', 'Table 6: Instruction-level Loose Accuracy'
+            CFG['instruction_loose_csv'], 'Table 6: Instruction-level Loose Accuracy'
         )
 
         # Tabela 7: Prompt-level Loose
         self._generate_pivot_table(
             self.df_all_prompts, 'Loose Pass', 
-            'table_7_prompt_loose.csv', 'Table 7: Prompt-level Loose Accuracy'
+            CFG['prompt_loose_csv'], 'Table 7: Prompt-level Loose Accuracy'
         )
 
         # Tabela 8: Detalhada por Tipo de Instrução
@@ -186,9 +195,9 @@ class MIFEvalAnalyzer:
             t8_pivot = t8_pivot.sort_values('Mean', ascending=False)
 
             print(f"\n[TABLE 8: Detailed Instruction Scores]")
-            print(t8_pivot.head(10).to_string())
-            t8_pivot.to_csv('table_8_detailed_instructions.csv')
-            print("Salvo: table_8_detailed_instructions.csv")
+            print(t8_pivot.head(CFG['detailed_row_limit']).to_string())
+            t8_pivot.to_csv(project_path(CONFIG["paths"]["report_output_dir"]) / CFG['detailed_instructions_csv'])
+            print(f"Salvo: {CFG['detailed_instructions_csv']}")
 
         # GRÁFICOS VISUAIS (FOCADOS NO IDIOMA ALVO)
 
@@ -206,56 +215,61 @@ class MIFEvalAnalyzer:
         if categories:
             counts = Counter(categories)
             labels, sizes = zip(*counts.most_common())
-            plt.figure(figsize=(10, 8))
-            plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, pctdistance=0.85)
-            plt.gca().add_artist(plt.Circle((0,0),0.70,fc='white'))
-            plt.title(f'Distribuição de Tarefas ({self.target_lang.upper()})', fontsize=14)
+            plt.figure(figsize=CFG['pie_size'])
+            plt.pie(sizes, labels=labels, autopct=CFG['pie_percentage_format'], startangle=CFG['pie_start_angle'], pctdistance=CFG['pie_percentage_distance'])
+            plt.gca().add_artist(plt.Circle((0,0),CFG["center_radius"],fc=CFG['center_color']))
+            plt.title(f'Distribuição de Tarefas ({self.target_lang.upper()})', fontsize=CFG['title_font_size'])
             plt.tight_layout()
-            plt.savefig(f'pie_distribution_{self.target_lang}.png')
+            plt.savefig(project_path(CONFIG["paths"]["report_output_dir"]) / CFG['output_pie_distribution'].format(language=self.target_lang))
             plt.close()
 
         # 2. Bar Chart (Category Strict)
         if not df_chart_inst.empty:
             cat_strict = df_chart_inst.groupby(['Model', 'Category'])['Strict Passed'].mean() * 100
             cat_strict = cat_strict.reset_index()
-            plt.figure(figsize=(14, 7))
-            sns.barplot(data=cat_strict, x='Category', y='Strict Passed', hue='Model', palette='viridis')
-            plt.title(f'Category Accuracy - STRICT ({self.target_lang.upper()})', fontsize=14)
-            plt.ylim(0, 100)
-            plt.xticks(rotation=45, ha='right')
-            plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left')
+            plt.figure(figsize=CFG['category_size'])
+            sns.barplot(data=cat_strict, x='Category', y='Strict Passed', hue='Model', palette=CFG['strict_palette'])
+            plt.title(f'Category Accuracy - STRICT ({self.target_lang.upper()})', fontsize=CFG['title_font_size'])
+            plt.ylim(CFG['y_axis_min'], CFG['y_axis_max'])
+            plt.xticks(rotation=CFG["x_axis_rotation"], ha=CFG['x_axis_alignment'])
+            plt.legend(bbox_to_anchor=CFG['legend_bbox'], loc=CFG['legend_location'])
             plt.tight_layout()
-            plt.savefig(f'category_strict_{self.target_lang}.png')
+            plt.savefig(project_path(CONFIG["paths"]["report_output_dir"]) / CFG['output_category_strict'].format(language=self.target_lang))
             plt.close()
 
         # 3. Bar Chart (Category Loose)
             cat_loose = df_chart_inst.groupby(['Model', 'Category'])['Loose Passed'].mean() * 100
             cat_loose = cat_loose.reset_index()
-            plt.figure(figsize=(14, 7))
-            sns.barplot(data=cat_loose, x='Category', y='Loose Passed', hue='Model', palette='rocket')
-            plt.title(f'Category Accuracy - LOOSE ({self.target_lang.upper()})', fontsize=14)
-            plt.ylim(0, 100)
-            plt.xticks(rotation=45, ha='right')
-            plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left')
+            plt.figure(figsize=CFG['category_size'])
+            sns.barplot(data=cat_loose, x='Category', y='Loose Passed', hue='Model', palette=CFG['loose_palette'])
+            plt.title(f'Category Accuracy - LOOSE ({self.target_lang.upper()})', fontsize=CFG['title_font_size'])
+            plt.ylim(CFG['y_axis_min'], CFG['y_axis_max'])
+            plt.xticks(rotation=CFG["x_axis_rotation"], ha=CFG['x_axis_alignment'])
+            plt.legend(bbox_to_anchor=CFG['legend_bbox'], loc=CFG['legend_location'])
             plt.tight_layout()
-            plt.savefig(f'category_loose_{self.target_lang}.png')
+            plt.savefig(project_path(CONFIG["paths"]["report_output_dir"]) / CFG['output_category_loose'].format(language=self.target_lang))
             plt.close()
 
         # 4. Leaderboard Strict (Gráfico)
         lb_strict = df_chart_prompts.groupby('Model')['Strict Pass'].mean() * 100
         lb_strict = lb_strict.sort_values(ascending=False).reset_index()
-        plt.figure(figsize=(12, 6))
-        sns.barplot(data=lb_strict, x='Model', y='Strict Pass', hue='Model', palette='Blues_d', legend=False)
-        plt.title(f'Leaderboard Strict - {self.target_lang.upper()}', fontsize=14)
-        plt.ylim(0, 100)
-        plt.xticks(rotation=45, ha='right')
+        plt.figure(figsize=CFG['leaderboard_size'])
+        sns.barplot(data=lb_strict, x='Model', y='Strict Pass', hue='Model', palette=CFG['leaderboard_palette'], legend=False)
+        plt.title(f'Leaderboard Strict - {self.target_lang.upper()}', fontsize=CFG['title_font_size'])
+        plt.ylim(CFG['y_axis_min'], CFG['y_axis_max'])
+        plt.xticks(rotation=CFG["x_axis_rotation"], ha=CFG['x_axis_alignment'])
         plt.tight_layout()
-        plt.savefig(f'leaderboard_{self.target_lang}.png')
+        plt.savefig(project_path(CONFIG["paths"]["report_output_dir"]) / CFG['output_leaderboard'].format(language=self.target_lang))
         plt.close()
         
         print("Todos os gráficos e tabelas foram gerados.")
 
 if __name__ == "__main__":
-    analyzer = MIFEvalAnalyzer(folder_name=os.path.join('experiments', 'evaluations'), target_lang='pt')
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate benchmark reports")
+    parser.add_argument("--config", help="Metrics YAML configuration file.")
+    parser.parse_args()
+    project_path(CONFIG["paths"]["report_output_dir"]).mkdir(parents=True, exist_ok=True)
+    analyzer = MIFEvalAnalyzer(folder_name=project_path(CONFIG['paths']['report_evaluations']), target_lang=CFG['target_language'])
     analyzer.load_data()
     analyzer.generate_outputs()

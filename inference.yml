@@ -1,0 +1,183 @@
+# Paths are relative to the repository root. metrics.yml shares only this io section.
+io:
+  input_files:
+    pt: data/pt_input_data.jsonl
+    pten: experiments/data_close/pten_input_data.jsonl
+  data_dir: data
+  responses_dir: experiments/generated_responses
+  response_marker: _input_response_data_
+  response_extension: .jsonl
+  response_template: '{dataset}_input_response_data_{model}.jsonl'
+  input_template: '{dataset}_input_data.jsonl'
+  language_aliases:
+    pt: pt
+    pten: pten
+    pt_en: pten
+# Original backend-specific settings are intentionally kept separate.
+universal_inference:
+  max_new_tokens: 32768
+  batch_size: 4
+  load_in_8bit: false
+  reasoning_markers:
+  - Okay, I need to
+  - Okay, the user
+  - Here is the blog post
+  - Sure, here
+  - Let me start by
+  - I need to write
+  - 'Analysis:'
+  - First, I will
+  - To write this essay
+  - First, I'll outline
+  - 'Thinking Process:'
+  prefer_transformers: false
+  structured_thinking_end_patterns:
+  - \*\s*Okay,\s*(?:let\'s|I will)\s*write
+  - \*\s*(?:Drafting|Writing)\s+the\s+(?:actual|final)
+  - '---+'
+  gpu_memory_utilization: 0.9
+  max_model_len: 8096
+  datasets_default:
+  - pt
+  transformers_trust_remote_code: true
+  tokenizer_trust_remote_code: true
+  vllm_trust_remote_code: true
+  vllm_enforce_eager: true
+  tensor_parallel_size: 1
+  vllm_dtype: auto
+  vllm_qwen3_temperature: 0.7
+  vllm_qwen3_top_p: 0.8
+  vllm_stop_strings:
+  - </s>
+  - <|end|>
+  - <|im_end|>
+  vllm_default_temperature: 0.0
+  chat_template_tokenize: false
+  chat_template_add_generation_prompt: true
+  qwen3_enable_thinking: true
+  qwen35_enable_thinking: false
+  generation_max_length: null
+  hf_token_env: HF_TOKEN
+  hf_token_fallback_env: HUGGING_FACE_HUB_TOKEN
+  qwen3_do_sample: true
+  qwen3_temperature: 0.7
+  qwen3_top_p: 0.8
+  default_do_sample: false
+  repetition_penalty: 1.2
+  closed_thinking_pattern: <think>.*?</think>
+  structured_thinking_pattern: ^\s*\d+\.\s+\*{0,2}(?:Analyze|Plan|Draft|Review|Determine|Check|Final)
+  special_token_pattern: <\|.*?\|>
+  sentence_token_pattern: </?s>
+  pad_token: <pad>
+  eos_token: <eos>
+  trailing_pad_pattern: (\s*<pad>\s*)+$
+  trailing_sentence_pattern: (\s*</s>\s*)+$
+  leading_thinking_pattern: ^.*?</think>\s*
+  maximum_context_tokens: 32768
+  message_role: user
+  leading_newlines: "\n"
+  context_cap: 32768
+  gpu_util_cap: 0.95
+  allocator_env: PYTORCH_CUDA_ALLOC_CONF
+  minimum_candidate_words: 10
+  reasoning_marker_max_index: 100
+  minimum_clean_words: 3
+  fallback_characters: 2000
+  progress_interval: 50
+  transformers_dtype: bfloat16
+  allocator_config: expandable_segments:True
+  fallback_chat_template: "<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
+  qwen3_markers:
+  - qwen3
+  - qwen-3
+  qwen35_markers:
+  - qwen3.5
+  - qwen3_5
+  opening_thinking_tag: <think>
+  closing_thinking_tag: </think>
+  leading_strip_fragments:
+  - "e\n"
+  - "va\n"
+  prompt_column_candidates:
+  - instruction
+  - input
+  device_map: auto
+  return_full_text: false
+get_responses:
+  supported_models:
+    gpt-4o-mini-2024-07-18: openai
+    gpt-4o-2024-08-06: openai
+    o1-preview-2024-09-12: openai
+    o1-mini-2024-09-12: openai
+    claude-3-haiku-20240307: anthropic
+    claude-3-5-sonnet-20240620: anthropic
+    claude-3-opus-20240229: anthropic
+    CohereForAI/c4ai-command-r-plus-4bit: vllm
+    CohereForAI/c4ai-command-r-v01-4bit: vllm
+    CohereForAI/aya-23-8B: vllm
+    Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4: vllm
+    Qwen/Qwen2.5-1.5B-Instruct-GPTQ-Int4: vllm
+    Qwen/Qwen2.5-3B-Instruct-GPTQ-Int4: vllm
+    Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4: vllm
+    Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4: vllm
+    Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4: vllm
+    Qwen/Qwen2.5-72B-Instruct-GPTQ-Int4: vllm
+    hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4: vllm
+    hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4: vllm
+    mistralai/Mistral-7B-Instruct-v0.3: vllm
+    deepseek-ai/deepseek-llm-7b-chat: vllm
+  vllm_temperature: 0.0
+  vllm_max_tokens: 2048
+  use_progress_bar: true
+  anthropic_max_tokens: 2048
+  anthropic_temperature: 0
+  anthropic_key_env: ANTHROPIC_API_KEY
+  openai_key_env: OPENAI_API_KEY
+  max_model_len_env: MAX_MODEL_LEN
+  vllm_max_model_len: 4096
+  message_role: user
+  input_glob: '*_input_data.jsonl'
+benchmark_runner:
+  models_to_benchmark:
+  - meta-llama/Llama-3.1-8B-Instruct
+  - Qwen/Qwen3-8B
+  - google/gemma-4-E4B-it
+  - CEIA-UFG/Gemma-3-Gaia-PT-BR-4b-it
+  - Polygl0t/Tucano2-qwen-3.7B-Instruct
+  - nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
+  gpu_util_default: 0.9
+  gpu_util_large: 0.88
+  datasets_default:
+  - pt
+  datasets:
+  - pt
+  - pten
+  cleanup_process_patterns:
+  - vllm.v1.engine.core
+  - EngineCore
+  large_model_markers:
+  - 13b
+  - 30b
+  - 32b
+  - 34b
+  - 70b
+  cleanup_wait_seconds: 30
+  cleanup_poll_seconds: 2
+  minimum_free_memory_fraction: 0.85
+  large_batch_size: 16
+  batch_size: 64
+  divider_width: 60
+  # Used only with explicit --install-dependencies; not a replacement for requirements.txt.
+  install_dependencies:
+  - vllm==0.19.1
+  - bitsandbytes==0.45.1
+  - hf-transfer==0.1.9
+  - psutil
+  - langdetect
+  - janome
+  - ja_sentence_segmenter
+  - spacy
+  - nltk
+  - accelerate
+  upgrade_dependencies:
+  - transformers>=5.5.0

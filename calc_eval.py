@@ -8,6 +8,11 @@ dataset, which is useful for comparing legacy runs against Portuguese-IFEval's
 
 from __future__ import annotations
 
+from config import load_config, project_path
+CONFIG = load_config('metrics')
+CFG = CONFIG['calc_eval']
+
+
 import argparse
 import json
 from dataclasses import dataclass
@@ -15,8 +20,8 @@ from pathlib import Path
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
-DEFAULT_EVALUATIONS_DIR = PROJECT_DIR / "experiments" / "evaluations"
-DEFAULT_PORTUGUESE_DATA = PROJECT_DIR / "data" / "pt_input_data.jsonl"
+DEFAULT_EVALUATIONS_DIR = project_path(CONFIG["paths"]["report_evaluations"])
+DEFAULT_PORTUGUESE_DATA = project_path(CONFIG["io"]["input_files"]["pt"])
 
 
 @dataclass(frozen=True)
@@ -92,13 +97,14 @@ def find_evaluation_directories(root: Path) -> list[Path]:
 
 
 def format_score(score: Accuracy | None) -> str:
-    return "N/A" if score is None else f"{score.percent:.2f}"
+    return "N/A" if score is None else f"{score.percent:.{CFG['score_decimals']}f}"
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Calculate strict and loose prompt-level evaluation accuracy."
     )
+    parser.add_argument("--config", help="Stage YAML configuration file.")
     parser.add_argument(
         "--evaluations-dir",
         type=Path,
@@ -121,19 +127,19 @@ def main() -> None:
     if canonical_prompts is not None:
         print(f"Filtering to {len(canonical_prompts)} canonical prompts: {args.canonical_data}")
 
-    print(f"{'MODEL / LANGUAGE':<65} | {'PROMPTS':>7} | {'STRICT %':>8} | {'LOOSE %':>8}")
-    print("-" * 103)
+    print(f"{'MODEL / LANGUAGE':<{CFG['model_width']}} | {'PROMPTS':>{CFG['prompt_width']}} | {'STRICT %':>{CFG['score_width']}} | {'LOOSE %':>{CFG['score_width']}}")
+    print("-" * CFG["separator_width"])
 
     for directory in find_evaluation_directories(args.evaluations_dir):
-        strict = calculate_accuracy(directory / "eval_results_strict.jsonl", canonical_prompts)
-        loose = calculate_accuracy(directory / "eval_results_loose.jsonl", canonical_prompts)
+        strict = calculate_accuracy(directory / CONFIG["evaluation_main"]["strict_filename"], canonical_prompts)
+        loose = calculate_accuracy(directory / CONFIG["evaluation_main"]["loose_filename"], canonical_prompts)
         if strict is None and loose is None:
             continue
 
         prompt_count = strict.total if strict is not None else loose.total
         print(
-            f"{directory.name[:65]:<65} | {prompt_count:>7} | "
-            f"{format_score(strict):>8} | {format_score(loose):>8}"
+            f"{directory.name[:CFG['model_width']]:<{CFG['model_width']}} | {prompt_count:>{CFG['prompt_width']}} | "
+            f"{format_score(strict):>{CFG['score_width']}} | {format_score(loose):>{CFG['score_width']}}"
         )
 
 

@@ -15,11 +15,16 @@
 
 """Utility library of instructions."""
 
+from config import load_section
+CFG = load_section('data_gen', 'instruction_defaults', 'es')
+
+
 #NOTE:INCLUDE spacy installation in requirements or README in the future.
 #pip3 install spacy    #The core library
 #python -m spacy download es_core_news_sm    #The Spanish language model for tokenization and other NLP tasks.
 
 import spacy
+NLP_CONFIG = load_section("metrics", "nlp")
 
 import functools
 import random
@@ -29,7 +34,7 @@ from typing import List
 import immutabledict
 
 
-WORD_LIST = ["amigo", "comida", "escuela", "casa", "familia", "trabajo", "tiempo", "libro", "ciudad", "perro"]  # pylint: disable=line-too-long
+WORD_LIST = CFG['word_list']  # pylint: disable=line-too-long
 
 # ISO 639-1 codes to language names.
 LANGUAGE_CODES = immutabledict.immutabledict({
@@ -74,7 +79,7 @@ _WEBSITES = "[.](com|net|org|io|gov|edu|me|es|mx|ar|cl|co|pe|uy|ve|bo|do|gt|hn|p
 _DIGITS = "([0-9])"
 _MULTIPLE_DOTS = r"\.{2,}"
 
-nlp = spacy.load("es_core_news_sm")
+nlp = spacy.load(NLP_CONFIG["spanish_model"])
 
 def split_into_sentences(text):
   """Split the text into sentences.

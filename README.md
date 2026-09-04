@@ -1,7 +1,7 @@
 # Portuguese-IFEval: Extending M-IFEval to Portuguese
 
 <span style="display: inline; gap: 5px;">
-<a href="https://github.com/ManuPassinato/M-IFEvalFork/pulls"><img src="https://img.shields.io/badge/PRs-Welcome-purple?color=%23b304d6" height="20"/></a>
+<a href="https://github.com/gap-ufg/Portuguese-IFEval/pulls"><img src="https://img.shields.io/badge/PRs-Welcome-purple?color=%23b304d6" height="20"/></a>
 <a href="https://www.arxiv.org/abs/2502.04688"><img src="https://img.shields.io/badge/M--IFEval-ArXiv-gray?logo=arxiv&labelColor=%23B31B1B" height="20"/></a>
 </span>
 
@@ -26,8 +26,8 @@ The prompts were then rewritten with the same model to improve linguistic natura
 Clone this fork and enter its directory:
 
 ```bash
-git clone https://github.com/ManuPassinato/M-IFEvalFork.git
-cd M-IFEvalFork
+git clone https://github.com/gap-ufg/Portuguese-IFEval.git
+cd Portuguese-IFEval
 ```
 
 Create and activate a virtual environment, then install the project dependencies:
@@ -55,16 +55,22 @@ python -m nltk.downloader punkt_tab
 
 > **Environment note:** `vllm` and `bitsandbytes` are primarily intended for supported Linux/GPU environments. API response files and the rule-based evaluator can be used without running a local vLLM model.
 
+The project uses three configuration files: `data_gen.yml` for candidate generation, `inference.yml` for model inference, and `metrics.yml` for evaluation and reporting. Select a file with `--config`, or use `IFEVAL_DATA_GEN_CONFIG`, `IFEVAL_INFERENCE_CONFIG`, and `IFEVAL_METRICS_CONFIG`. Explicit command-line arguments override YAML defaults; credentials remain in environment variables.
+
+Paths in YAML are relative to the repository root, while command-line paths are relative to the working directory. In `metrics.yml`, `source.config` is relative to the configuration file and references the inference input/output settings. Configuration is cached per process; restart a script or notebook kernel after editing it.
+
 ### Choose the Prompt Set
 
 This repository uses two Portuguese evaluation settings:
 
 | Setting | Input file | Meaning |
 | --- | --- | --- |
-| **PT** | `data/pt_input_data_FINAL_CLEAN.jsonl` | Portuguese-IFEval: the language-aware, semantically regionalized benchmark introduced in this work |
-| **PT_EN** | `data/pten_input_data.jsonl` | Translated IFEval: all 541 original English IFEval prompts translated into Portuguese with GPT-5, with the required evaluator adaptations |
+| **PT** | `data/pt_input_data.jsonl` | Portuguese-IFEval: the language-aware, semantically regionalized benchmark introduced in this work (535 prompts) |
+| **PT_EN** | `experiments/data_close/pten_input_data.jsonl` | Translated IFEval: all 541 original English IFEval prompts translated into Portuguese with GPT-5, with the required evaluator adaptations |
 
 `PT_EN` is the translated Portuguese control benchmark. It is not a bilingual or mixed Portuguese-English split. The repository uses the shorter `pten` prefix in filenames for this setting.
+
+> **PT_EN compatibility note:** the supplied PTEN dataset contains eight instruction identifiers absent from the evaluator registry, affecting 251 prompts. Both the original and YAML-configured evaluators fail on these identifiers. Resolve this data/registry mismatch before evaluating PTEN; `--dry-run` checks prompt coverage, not checker validity.
 
 For exact paper reproduction, the PT input must correspond to the final 535-prompt validated split described in the corrected paper.
 
@@ -86,6 +92,8 @@ The `prompt` value must be preserved exactly because the evaluator uses it to ma
 
 ### Response Generation Workflow
 
+Candidate generation is configured in `data_gen.yml` and run with `python gen_input_data.py --config data_gen.yml`. It requires a running OpenAI-compatible endpoint and appends candidates to `pt_input_data.json`; it does not replace the curated benchmark inputs. `model_handler.retry_attempts` defaults to one, preserving the original effective behavior; increase it to retry failed requests, with `retry_wait_seconds` between attempts.
+
 The evaluation pipeline has two distinct stages:
 
 1. Select a prompt dataset (`PT` or `PT_EN`).
@@ -102,15 +110,15 @@ In short:
 
 #### API and Configured Backends
 
-`get_responses.py` supports the OpenAI, Anthropic, and vLLM backends configured in `SUPPORTED_MODELS`. To add a model, map its exact identifier to the appropriate backend:
+`get_responses.py` supports the OpenAI, Anthropic, and vLLM backends configured in `inference.yml`. To add a model, extend `get_responses.supported_models`:
 
-```python
-SUPPORTED_MODELS = {
-    # Existing entries...
-    "gpt-5": "openai",
-    "claude-haiku-4-5-20251001": "anthropic",
-    "Qwen/Qwen3-8B": "vllm",
-}
+```yaml
+get_responses:
+  supported_models:
+    # Keep the existing entries and add the desired model.
+    gpt-5: openai
+    claude-haiku-4-5-20251001: anthropic
+    Qwen/Qwen3-8B: vllm
 ```
 
 Set the credential required by the selected provider. For example:
@@ -122,10 +130,10 @@ export ANTHROPIC_API_KEY="YOUR_KEY"
 
 On Windows PowerShell, use `$env:OPENAI_API_KEY="YOUR_KEY"` or `$env:ANTHROPIC_API_KEY="YOUR_KEY"`.
 
-Run response generation with the same model identifier added to `SUPPORTED_MODELS`:
+Run response generation with the same model identifier added to `get_responses.supported_models`:
 
 ```bash
-python get_responses.py --model_name gpt-5
+python get_responses.py --config inference.yml --model_name gpt-5
 ```
 
 The script performs the following steps:
@@ -136,24 +144,25 @@ The script performs the following steps:
 4. Writes only `prompt` and `response` to a new JSONL file.
 5. Replaces `/` with `__` in model identifiers when constructing the output filename.
 
-> **API usage note:** one invocation processes every matching input file, not only PT or `PT_EN`. Review the selected `paths` before running a paid API model.
+> **API usage note:** one invocation processes every matching input file, not only PT or `PT_EN`. Review `io.data_dir` and `get_responses.input_glob` before running a paid API model. The default `data/` contains PT and the other original languages, but not PTEN. Use `--input_dir experiments/data_close` for the PTEN input.
 
-For example, responses generated from `data/pten_input_data.jsonl` with `gpt-5` are written to:
+For example, PTEN responses with `gpt-5` are written to:
 
 ```text
-data/pten_input_response_data_gpt-5.jsonl
+experiments/generated_responses/pten_input_response_data_gpt-5.jsonl
 ```
 
-The `PT_EN` file already matches the helper's input pattern. The regionalized file `pt_input_data_FINAL_CLEAN.jsonl` does not match `*_input_data.jsonl`; when using `get_responses.py` for PT, point its `paths` list to that file explicitly or use a working filename ending in `_input_data.jsonl`.
+Both canonical input filenames match `*_input_data.jsonl`, but they live in different directories. The helper's `--input_dir` and `--output_dir` override YAML paths.
 
 #### Local Open-Weight Models
 
-`universal_inference.py` reads the multilingual prompt files, prefers `{language}_input_data_FINAL_CLEAN.jsonl`, applies the model chat template, generates one response per prompt, and writes `{language}_input_response_data_{model}.jsonl`:
+`universal_inference.py` reads the explicitly selected PT/PTEN inputs in `inference.yml`, applies the model chat template, generates one response per prompt, and writes `{language}_input_response_data_{model}.jsonl`:
 
 ```bash
 python universal_inference.py \
   --model_name Qwen/Qwen3-8B \
-  --data_dir ./data \
+  --config inference.yml \
+  --datasets pt \
   --gpu_memory_utilization 0.90 \
   --max_model_len 8096
 ```
@@ -161,7 +170,7 @@ python universal_inference.py \
 This produces the Portuguese response file:
 
 ```text
-data/pt_input_response_data_Qwen__Qwen3-8B.jsonl
+experiments/generated_responses/pt_input_response_data_Qwen__Qwen3-8B.jsonl
 ```
 
 The paper reports three runs for open-weight models and presents their mean and standard deviation. The universal inference pipeline uses a default maximum generation length of 32,768 tokens, an effective generation limit capped by the tokenizer-detected context length, a default batch size of 4, `gpu_memory_utilization=0.90` for vLLM (capped at 0.95), and a default `max_model_len=8096` unless further constrained by the tokenizer.
@@ -170,27 +179,44 @@ Qwen 3 is the only reported open-weight family evaluated with stochastic decodin
 
 Before evaluation, verify that the response file contains one non-empty response for every prompt in the selected input file. Missing or modified prompt strings prevent exact matching.
 
+Response cleaning is controlled by the patterns in `inference.yml`. The unused `transformers_stop_strings` option was removed; the default cleaning behavior is unchanged.
+
+To run inference followed by evaluation, use `python benchmark_runner.py --config inference.yml --metrics-config metrics.yml --models Qwen/Qwen3-8B --datasets pt`. The runner forwards the selected configuration and input/output settings to both stages. Add `--dry-run` to validate paths and prompt coverage without loading a model. The existing notebooks remain interactive examples; the YAML-configured scripts define this workflow.
+
 ### Evaluate the Generated Responses
+
+`metrics.yml` configures evaluation filenames, output directories, NLP resources, and reports. By default, it shares the input/response paths from `inference.yml`. For a historical campaign, supply the matching input paths explicitly or select `source.mode: explicit` with a complete `source.io` mapping.
 
 Evaluate a response file generated for Portuguese-IFEval:
 
 ```bash
 python -m evaluation_main \
-  --input_data=./data/pt_input_data_FINAL_CLEAN.jsonl \
-  --input_response_data=./data/pt_input_response_data_Qwen__Qwen3-8B.jsonl \
+  --config=metrics.yml \
+  --input_data=./data/pt_input_data.jsonl \
+  --input_response_data=./experiments/generated_responses/pt_input_response_data_Qwen__Qwen3-8B.jsonl \
   --output_dir=./evaluation_runs/pt_Qwen__Qwen3-8B
 ```
 
-Evaluate a response file generated for the translated `PT_EN` benchmark:
+After resolving the dataset/registry mismatch noted above, evaluate a response file generated for the translated `PT_EN` benchmark:
 
 ```bash
 python -m evaluation_main \
-  --input_data=./data/pten_input_data.jsonl \
-  --input_response_data=./data/pten_input_response_data_openai__gpt-5.jsonl \
+  --config=metrics.yml \
+  --input_data=./experiments/data_close/pten_input_data.jsonl \
+  --input_response_data=./experiments/data_close/pten_input_response_data_openai__gpt-5.jsonl \
   --output_dir=./evaluation_runs/pten_openai__gpt-5
 ```
 
 Each command writes `eval_results_strict.jsonl` and `eval_results_loose.jsonl`. The evaluator computes compliance at the instruction level, and prompt-level success requires that **all** instructions attached to a prompt be satisfied. This requirement applies to both Strict and Loose evaluation. Unless otherwise stated, the paper's overall benchmark tables report prompt-level performance, while the language-specific comparison in Table 5 reports instruction-level Strict accuracy. The same command structure applies to the other language splits when the input and response files contain identical prompt sets.
+
+To evaluate a directory of responses and calculate its prompt-level scores:
+
+```bash
+python run_eval_only.py --config metrics.yml --responses-dir experiments/generated_responses --languages pt
+python calc_eval.py --config metrics.yml --evaluations-dir experiments/generated_evaluations
+```
+
+New evaluations default to `experiments/generated_evaluations`. In `metrics.yml`, `paths.report_evaluations: null` makes score calculation, tables, and plots follow `paths.generated_evaluations` automatically; set an explicit path to report a historical campaign instead. Run `python tables.py --config metrics.yml` to produce tables and plots in `paths.report_output_dir`. `tables.py` retains its original aggregation behavior; use `calc_eval.py` for separate Strict and Loose prompt-level scores. `bash run.sh` also invokes the directory evaluator.
 
 ## Language Coverage
 
@@ -215,7 +241,7 @@ The Portuguese extension regionalizes the original verifiable instruction catego
 - **Second-person plural address (`vós`):** use a lexical approximation that rejects competing forms such as `você`, `vocês`, and `tu`, requires at least one token from the `vós` family, and looks within a five-token window for a compatible verb form.
 - **Four porquês:** require exactly one occurrence of a form from the `porque`/`porquê`/`por que`/`por quê` family and apply deterministic contextual heuristics for the target subtype specified by the prompt.
 
-The implementation is provided by `instructions/pt_instructions.py`, `instruction_utils/pt_instructions_util.py`, and the Portuguese entries in `instructions_registry.py`. Focused checks are available in `tests/test_pt_instructions2.py`.
+The implementation is provided by `instructions/pt_instructions.py`, `instruction_utils/pt_instructions_util.py`, and the Portuguese entries in `instructions_registry.py`. Configuration regression checks are available in `tests/test_configuration.py` and can be run with `python -m unittest discover -s tests -v`.
 
 ## Portuguese Dataset and Artifacts
 
@@ -223,11 +249,11 @@ The main Portuguese benchmark assets are:
 
 | Path | Description |
 | --- | --- |
-| `data/pt_input_data_FINAL_CLEAN.jsonl` | Portuguese-IFEval prompt collection used for the regionalized PT setting |
-| `data/pten_input_data.jsonl` | `PT_EN`: the complete 541-prompt IFEval benchmark translated into Portuguese |
-| `data/pt_input_response_data_*.jsonl` | Historical model responses for the Portuguese evaluation |
-| `evaluations/pt_*` | Portuguese evaluation outputs |
-| `evaluations/pten_*` | Translated `PT_EN` evaluation outputs |
+| `data/pt_input_data.jsonl` | Portuguese-IFEval prompt collection used for the regionalized PT setting |
+| `experiments/data_close/pten_input_data.jsonl` | `PT_EN`: the complete 541-prompt IFEval benchmark translated into Portuguese |
+| `experiments/data_*` | Historical model responses; see `experiments/README.md` |
+| `experiments/generated_responses` | Default destination for new responses |
+| `experiments/generated_evaluations` | Default destination for new evaluation outputs |
 
 ## Experimental Results
 

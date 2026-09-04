@@ -15,15 +15,20 @@
 
 """Utility library of instructions."""
 
+from config import load_section
+CFG = load_section('data_gen', 'instruction_defaults', 'pt')
+
+
 import functools
 import random
 import re
 from typing import List
 import spacy
+NLP_CONFIG = load_section("metrics", "nlp")
 import immutabledict
 import nltk
 
-WORD_LIST = ["saudade", "amanhã", "cidadão", "trabalho", "escola", "saúde", "privado", "justiça", "cultura", "verdade"]  # pylint: disable=line-too-long
+WORD_LIST = CFG['word_list']  # pylint: disable=line-too-long
 
 # ISO 639-1 codes to language names.
 LANGUAGE_CODES = immutabledict.immutabledict({
@@ -129,9 +134,9 @@ def count_words(text):
 
 @functools.lru_cache(maxsize=None)
 def _get_sentence_tokenizer():
-    nlp = spacy.load("pt_core_news_sm", disable=["tagger", "parser", "ner"])
-    if "sentencizer" not in nlp.pipe_names:
-      nlp.add_pipe("sentencizer")
+    nlp = spacy.load(NLP_CONFIG["portuguese_model"], disable=NLP_CONFIG["portuguese_disable"])
+    if NLP_CONFIG["sentence_component"] not in nlp.pipe_names:
+      nlp.add_pipe(NLP_CONFIG["sentence_component"])
     return nlp
 
 def tokenize_words(text):

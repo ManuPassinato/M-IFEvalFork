@@ -15,6 +15,10 @@
 
 """Utility library of instructions."""
 
+from config import load_section
+CFG = load_section('data_gen', 'instruction_defaults', 'fr')
+
+
 import functools
 import random
 import re
@@ -23,10 +27,11 @@ import unicodedata
 
 import immutabledict
 import nltk
+NLP_CONFIG = load_section("metrics", "nlp")
 
-nltk.download('punkt_tab')
+nltk.download(NLP_CONFIG["nltk_resource"])
 
-WORD_LIST = ["occidental", "phrase", "signal", "château", "tache", "opposé", "bas", "pomme de terre", "administration", "étoile"]  # pylint: disable=line-too-long
+WORD_LIST = CFG['word_list']  # pylint: disable=line-too-long
 
 # ISO 639-1 codes to language names.
 LANGUAGE_CODES = immutabledict.immutabledict({

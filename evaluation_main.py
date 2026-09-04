@@ -15,6 +15,10 @@
 
 """Binary of evaluating instruction following. See README.md."""
 
+from config import load_section
+CFG = load_section('metrics', 'evaluation_main')
+
+
 import collections
 import dataclasses
 import json
@@ -27,6 +31,9 @@ from absl import logging
 
 import instructions_registry
 
+
+_CONFIG_FILE = flags.DEFINE_string("config", None, "Metrics YAML file")
+_INFERENCE_CONFIG_FILE = flags.DEFINE_string("inference-config", None, "Runner compatibility flag; input paths are supplied explicitly")
 
 _INPUT_DATA = flags.DEFINE_string(
     "input_data", None, "path to input data", required=True
@@ -285,8 +292,8 @@ def main(argv):
 
   # get instruction following results
   for func, output_file_name in [
-      (test_instruction_following_strict, "eval_results_strict"),
-      (test_instruction_following_loose, "eval_results_loose"),
+      (test_instruction_following_strict, CFG["strict_filename"]),
+      (test_instruction_following_loose, CFG["loose_filename"]),
   ]:
     logging.info("Generating %s...", output_file_name)
     outputs = []
@@ -304,13 +311,13 @@ def main(argv):
     logging.info("Accuracy: %f", accuracy)
 
     output_file_name = os.path.join(
-        _OUTPUT_DIR.value, output_file_name + ".jsonl"
+        _OUTPUT_DIR.value, output_file_name
     )
     write_outputs(output_file_name, outputs)
     logging.info("Generated: %s", output_file_name)
 
     # Prints instruction following accuracy report.
-    print("=" * 64)
+    print("=" * CFG["divider_width"])
     print(f"{output_file_name} Accuracy Scores:")
     print_report(outputs)
 
