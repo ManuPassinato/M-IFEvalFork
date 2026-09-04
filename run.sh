@@ -1,3 +1,4 @@
+#!/bin/bash
 # Copyright 2024 The Google Research Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,11 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#!/bin/bash
-
-python3 -m instruction_following_eval.evaluation_main \
-  --input_data=./instruction_following_eval/data/input_data.jsonl \
-  --input_response_data=./instruction_following_eval/data/input_response_data_gpt4_20231107_145030.jsonl \
-  --output_dir=./instruction_following_eval/data/
-
-exit 0
+set -e
+cd -- "$(dirname -- "$0")"
+exec python3 run_eval_only.py --config metrics.yml "$@"

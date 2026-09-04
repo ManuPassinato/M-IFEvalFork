@@ -1,7 +1,8 @@
 # Experiment artifacts
 
-This directory centralizes generated responses and evaluation outputs. Benchmark
-input datasets remain under `data/`.
+This directory centralizes generated responses and evaluation outputs.
+PT and the original multilingual inputs remain under `data/`. The canonical
+541-prompt PTEN input is `experiments/data_close/pten_input_data.jsonl`.
 
 ## Current campaigns
 
@@ -15,9 +16,16 @@ input datasets remain under `data/`.
 - `data_closepten`, `eval_closepten`: legacy translated API-model artifacts pending deduplication.
 - `legacy_data`, `evaluations`: earlier M-IFEval responses and evaluations.
 
-`filter_audit.json` records every artifact filtered to the canonical set of 535
-Portuguese prompts. Run `python scripts/filter_experiment_prompts.py --dry-run`
-to check whether any oversized native-Portuguese artifacts remain.
+Historical campaigns can use different prompt sets. Validate coverage with
+`run_eval_only.py --dry-run` and supply the matching input dataset before evaluation.
+No automatic filtering script or audit manifest is shipped in this repository.
+
+The three root YAML files configure candidate generation, inference and metrics.
+`inference.yml` owns canonical input/response paths; `metrics.yml` references its
+`io` section and owns evaluation/report destinations. The defaults keep new output
+separate from historical campaigns. Pass `--config` to select an alternative YAML.
+With `paths.report_evaluations: null`, reports follow `paths.generated_evaluations`;
+set an explicit report path when analyzing one of the historical campaigns.
 
 ## Calculate scores
 
@@ -42,13 +50,18 @@ Evaluate Portuguese responses against the canonical 535-prompt dataset:
 python run_eval_only.py --responses-dir experiments/data_open_3 --evaluations-dir experiments/eval_open_3 --languages pt
 ```
 
-Evaluate the 541-prompt translated Portuguese benchmark:
+The command for the 541-prompt translated Portuguese benchmark is shown below.
+The shipped input currently has eight translated instruction IDs missing from the
+original registry (251 prompts affected), so both original and YAML evaluators
+fail with a `KeyError`. This preexisting data/registry incompatibility is not
+repaired by moving configuration and must be resolved before obtaining PTEN scores:
 
 ```bash
 python run_eval_only.py --responses-dir experiments/data_close --evaluations-dir experiments/evaluations_close --languages pten
 ```
 
-Use `--dry-run` to validate prompt coverage before writing evaluation outputs.
+Use `--dry-run` to validate prompt coverage before writing evaluation outputs;
+this does not validate every instruction ID or checker argument.
 The legacy `pt_en_*` files in `data_pten*` require their matching historical
 input dataset; supply it explicitly with `--pten-input-data` before evaluating
 them.

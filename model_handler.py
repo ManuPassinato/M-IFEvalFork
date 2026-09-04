@@ -1,23 +1,31 @@
+
+from config import load_section
+CFG = load_section('data_gen', 'model_handler')
+
 import os
+import time
 from typing import Dict, List, Optional
 from openai import AsyncOpenAI, BadRequestError, OpenAI
-from tenacity import retry, stop_after_attempt, wait_fixed
 
-VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL", "http://10.100.0.111:8020/v1")
-VLLM_API_KEY  = os.environ.get("VLLM_API_KEY", "no-key-needed")
+VLLM_BASE_URL = os.environ.get(CFG['vllm_base_url_env'], CFG['vllm_base_url_default'])
+VLLM_API_KEY  = os.environ.get(CFG['vllm_api_key_env'], CFG['vllm_api_key_default'])
 
-RESP_TEMPERATURE = float(os.environ.get("RESP_TEMPERATURE", str(1)))
-RESP_TOP_P       = float(os.environ.get("RESP_TOP_P", str(1)))
-RESP_MAX_TOKENS  = int(os.environ.get("RESP_MAX_TOKENS", "8192"))
+RESP_TEMPERATURE = float(os.environ.get(CFG['resp_temperature_env'], str(CFG['resp_temperature_default'])))
+RESP_TOP_P       = float(os.environ.get(CFG['resp_top_p_env'], str(CFG['resp_top_p_default'])))
+RESP_MAX_TOKENS  = int(os.environ.get(CFG['resp_max_tokens_env'], CFG['resp_max_tokens_default']))
 
-STOP_STRINGS      = ["<|im_end|>", "<|end_of_text|>"]
-STOP_TOKEN_IDS    = None
-LOGITS_PROCESSORS: List[str] = []
+STOP_STRINGS      = CFG['stop_strings']
+STOP_TOKEN_IDS    = CFG['stop_token_ids']
+LOGITS_PROCESSORS: List[str] = CFG['logits_processors']
 
-client = OpenAI(base_url=VLLM_BASE_URL, api_key=VLLM_API_KEY)
+from functools import lru_cache
+
+@lru_cache(maxsize=1)
+def get_client():
+    return OpenAI(base_url=VLLM_BASE_URL, api_key=VLLM_API_KEY)
 
 def get_model_id() -> str:
-    models = client.models.list()
+    models = get_client().models.list()
     if not models.data:
         raise RuntimeError("Nenhum modelo disponível no endpoint vLLM.")
     print(models.data[0].id)
@@ -36,7 +44,7 @@ def chat_call(
     max_tokens  = RESP_MAX_TOKENS
 
     extra_body = {
-        "chat_template_kwargs": {"enable_thinking": False},
+        "chat_template_kwargs": {"enable_thinking": CFG['enable_thinking']},
         "stop": STOP_STRINGS,
         "stop_token_ids": STOP_TOKEN_IDS,
         "logits_processors": LOGITS_PROCESSORS,
@@ -47,7 +55,7 @@ def chat_call(
         for k, v in extra_body_override.items():
             extra_body[k] = v
 
-    resp = client.chat.completions.create(
+    resp = get_client().chat.completions.create(
         model=model_id,
         messages=final_messages,
         temperature=temperature,
@@ -57,23 +65,19 @@ def chat_call(
     )
     return resp.choices[0].message.content or ""
 
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(0.1))
 def safe_chat_call(
     messages: List[Dict[str, str]],
     model_id: str,
     question_style: Optional[str] = None) -> Optional[str]:
-    """
-    Chama chat_call com 1 fallback específico para BadRequest 'Expected 2 output messages...'.
-    Se falhar novamente ou surgir outro erro, retorna None (para descartar a conversa).
-    """
-    try:
-        return chat_call(messages, model_id, question_style)
-    except BadRequestError as e:
-        msg = str(e)
+    """Try a request plus its BadRequest fallback; retry only when configured."""
+    for attempt in range(CFG['retry_attempts']):
         try:
-            eb2 = {"chat_template_kwargs": {"enable_thinking": True}}
-            return chat_call(messages, model_id, question_style, extra_body_override=eb2)
+            try:
+                return chat_call(messages, model_id, question_style)
+            except BadRequestError:
+                eb2 = {"chat_template_kwargs": {"enable_thinking": CFG['fallback_enable_thinking']}}
+                return chat_call(messages, model_id, question_style, extra_body_override=eb2)
         except Exception:
-            return None
-    except Exception:
-        return None
+            if attempt + 1 < CFG['retry_attempts']:
+                time.sleep(CFG['retry_wait_seconds'])
+    return None

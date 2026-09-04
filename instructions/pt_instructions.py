@@ -14,6 +14,10 @@
 # limitations under the License.
 
 """Library of instructions."""
+
+from config import load_section
+CFG = load_section('data_gen', 'instruction_defaults', 'pt')
+
 import collections
 import json
 import random
@@ -35,64 +39,55 @@ _LANGUAGES = pt_instructions_util.LANGUAGE_CODES
 _COMPARISON_RELATION = ("menos que", "ao menos")
 
 # The maximum number of sentences.
-_MAX_NUM_SENTENCES = 20
+_MAX_NUM_SENTENCES = CFG['max_num_sentences']
 
 # The number of placeholders.
-_NUM_PLACEHOLDERS = 4
+_NUM_PLACEHOLDERS = CFG['num_placeholders']
 
 # The number of bullet lists.
-_NUM_BULLETS = 5
+_NUM_BULLETS = CFG['num_bullets']
 
 # The options of constrained response.
 _CONSTRAINED_RESPONSE_OPTIONS = (
     "Sim.", "Não.", "Talvez.")
 
 # The options of starter keywords.
-_STARTER_OPTIONS = (
-    "Eu diria que", "Minha resposta é", "Aqui está"
-    "Acredito que", "Na minha opinião", "Eu penso que",
-    "Eu creio que", "Eu sinto que", "Do meu ponto de vista",
-    "Como eu vejo", "Segundo minha percepção","Pelo que entendo",
-    "Ao meu ver", "Minha interpretação é",
-    "Ele", "Ela", "Isso", "Um", "Uma", "Para",
-    "Por", "Então"
-)
+_STARTER_OPTIONS = tuple(CFG['starter_options'])
 
 # The options of ending keywords.
 # TODO(jeffreyzhou) add more ending options
-_ENDING_OPTIONS = ("Posso ajudar em algo mais?", "Você possui alguma outra dúvida?",
-                   "Gostaria de tentar de outra forma?")
+_ENDING_OPTIONS = tuple(CFG['ending_options'])
 
 # The number of highlighted sections.
-_NUM_HIGHLIGHTED_SECTIONS = 4
+_NUM_HIGHLIGHTED_SECTIONS = CFG['num_highlighted_sections']
 
 # The section spliter.
-_SECTION_SPLITER = ("Sessão", "SESSÃO")
+_SECTION_SPLITER = tuple(CFG['section_spliter'])
 
 # The number of sections.
-_NUM_SECTIONS = 5
+_NUM_SECTIONS = CFG['num_sections']
 
 # The number of paragraphs.
-_NUM_PARAGRAPHS = 5
+_NUM_PARAGRAPHS = CFG['num_paragraphs']
 
 # The postscript marker.
-_POSTSCRIPT_MARKER = ("P.S.", "Nota", "OBS.")
+_POSTSCRIPT_MARKER = tuple(CFG['postscript_marker'])
 
 # The number of keywords.
-_NUM_KEYWORDS = 2
+_NUM_KEYWORDS = CFG['num_keywords']
 
 # The occurrences of a single keyword.
-_KEYWORD_FREQUENCY = 3
+_KEYWORD_FREQUENCY = CFG['keyword_frequency']
 
 # The occurrences of a single letter.
-_LETTER_FREQUENCY = 10
+_LETTER_FREQUENCY = CFG['letter_frequency']
 
 # The occurrences of words with all capital letters.
-_ALL_CAPITAL_WORD_FREQUENCY = 20
+_ALL_CAPITAL_WORD_FREQUENCY = CFG['all_capital_word_frequency']
 
 # The number of words in the response.
-_NUM_WORDS_LOWER_LIMIT = 100
-_NUM_WORDS_UPPER_LIMIT = 500
+_NUM_WORDS_LOWER_LIMIT = CFG['num_words_lower_limit']
+_NUM_WORDS_UPPER_LIMIT = CFG['num_words_upper_limit']
 
 
 class Instruction:
@@ -1583,7 +1578,7 @@ class CedilhaFrequencyChecker(Instruction):
     def build_description(self, *, count=None):
         self._count = count
         if self._count is None:
-            self._count = random.randint(1, 5)
+            self._count = random.randint(1, CFG['cedilla_frequency'])
         self._description_pattern = "Na sua resposta, a letra 'ç' deve aparecer exatamente {count} vezes."
         return self._description_pattern.format(count=self._count)
 

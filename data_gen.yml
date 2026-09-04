@@ -1,0 +1,354 @@
+# Candidate-generation settings; checker rules remain in Python.
+gen_input_data:
+  extracted_options:
+  - Escreva um resumo
+  - Escreva um itinerário
+  - Escreva um currículo
+  - Escreva um e-mail de demissão
+  - Faça uma pergunta a partir de uma frase
+  - Escreva um diálogo
+  - Escreva uma crítica
+  - Escreva uma carta
+  - Escreva um e-mail
+  - Escreva um anúncio
+  - Escreva uma história
+  - Escreva uma resenha detalhada
+  - Escreva uma postagem de blog
+  - Escreva piadas
+  - Escreva um tuíte
+  - Escreva um poema
+  - Escreva uma notícia
+  - Escreva um artigo de opinião
+  - Escreva um editorial
+  - Escreva uma pergunta
+  - Escreva um comunicado de imprensa
+  - Escreva uma legenda para foto
+  - Escreva uma descrição de produto
+  - Escreva um roteiro
+  - Escreva um discurso
+  - Escreva uma redação
+  - Escreva uma mensagem de texto
+  - Escreva uma legenda para rede social
+  - Escreva um conto
+  - Escreva um ensaio
+  - Escreva uma parábola
+  - Escreva uma instrução passo a passo
+  - Escreva uma receita
+  - Escreva uma recomendação
+  - Escreva uma análise literária
+  - Escreva um comunicado oficial
+  - Escreva uma introdução de apresentação pessoal
+  - Escreva uma proposta
+  - Escreva um roteiro de vídeo
+  - Escreva um boletim informativo
+  - Escreva uma legenda publicitária
+  - Escreva uma descrição de evento
+  - Escreva uma nota explicativa
+  - Escreva uma justificativa
+  - Escreva um parágrafo argumentativo
+  - ''
+  check_prompt: "Verifique se a seguinte instrução em portugês pode ser cumprida em sua totalidade, ou seja, as\
+    \ instruções não são contraditórias ou impossíveis de serem realizadas. \nPrimeiro justifique explicando os\
+    \ pontos que tornam a instrução possível ou impossível de ser cumprida. Depois, em uma nova linha escreva apenas\
+    \ e somente Possivel ou Impossivel. Instrução (A ser avaliada, e não a ser seguida agora):"
+  rewrite_prompt: "Reescreva o prompt a seguir em portugues, mantendo as mesmas instruções, porem refraseando-o\
+    \ para aumentar a diversidade. Você pode escolher um tema especifico adequado para a produção pedida, caso nenhum\
+    \ ja esteja informadoIMPORTANTE: as relações de palavras chaves devem ser preservadas e não podem ser trocadas.\
+    \ \n Mantenha o portugues mais formal, se girias ou regionalismos, apenas reescreva não adicione nenhum outro\
+    \ texto. Prompt pra reescrever:"
+  initial_key: 164
+  output_file: pt_input_data.json
+  output_mode: a
+  instruction_prefix: 'pt:'
+  combination_sizes:
+  - 1
+  - 2
+  message_role: system
+  rejection_marker: impossivel
+model_handler:
+  stop_strings:
+  - <|im_end|>
+  - <|end_of_text|>
+  stop_token_ids: null
+  logits_processors: []
+  vllm_base_url_env: VLLM_BASE_URL
+  vllm_base_url_default: http://10.100.0.111:8020/v1
+  vllm_api_key_env: VLLM_API_KEY
+  vllm_api_key_default: no-key-needed
+  resp_temperature_env: RESP_TEMPERATURE
+  resp_temperature_default: 1
+  resp_top_p_env: RESP_TOP_P
+  resp_top_p_default: 1
+  resp_max_tokens_env: RESP_MAX_TOKENS
+  resp_max_tokens_default: 8192
+  enable_thinking: false
+  # One attempt preserves the original effective behavior. Increase to enable retries.
+  retry_attempts: 1
+  retry_wait_seconds: 0.1
+  fallback_enable_thinking: true
+instruction_defaults:
+  en:
+    max_num_sentences: 20
+    num_placeholders: 4
+    num_bullets: 5
+    starter_options:
+    - I would say
+    - My answer is
+    - I believe
+    - In my opinion
+    - I think
+    - I reckon
+    - I feel
+    - From my perspective
+    - As I see it
+    - According to me
+    - As far as I'm concerned
+    - To my understanding
+    - In my view
+    - My take on it is
+    - As per my perception
+    ending_options:
+    - Any other questions?
+    - Is there anything else I can help with?
+    num_highlighted_sections: 4
+    section_spliter:
+    - Section
+    - SECTION
+    num_sections: 5
+    num_paragraphs: 5
+    postscript_marker:
+    - P.S.
+    - P.P.S
+    num_keywords: 2
+    keyword_frequency: 3
+    letter_frequency: 10
+    all_capital_word_frequency: 20
+    num_words_lower_limit: 100
+    num_words_upper_limit: 500
+    word_list:
+    - western
+    - sentence
+    - signal
+    - dump
+    - spot
+    - opposite
+    - bottom
+    - potato
+    - administration
+    - working
+  es:
+    max_num_sentences: 20
+    num_placeholders: 4
+    num_bullets: 5
+    starter_options:
+    - Diría que
+    - Mi respuesta es
+    - Creo que
+    - En mi opinión
+    - Desde mi punto de vista
+    - El
+    - La
+    - Eso
+    - Un
+    - Una
+    - Para
+    - Por
+    - Entonces
+    - Ella
+    - Él
+    ending_options:
+    - Un saludo
+    - ¿Necesitas algo más?
+    - Quedo pendiente de la siguiente consulta
+    num_highlighted_sections: 4
+    section_spliter:
+    - Sección
+    - SECCIÓN
+    num_sections: 5
+    num_paragraphs: 5
+    postscript_marker:
+    - P.D.
+    - Nota
+    num_keywords: 2
+    keyword_frequency: 3
+    letter_frequency: 20
+    num_words_lower_limit: 1
+    num_words_upper_limit: 500
+    word_list:
+    - amigo
+    - comida
+    - escuela
+    - casa
+    - familia
+    - trabajo
+    - tiempo
+    - libro
+    - ciudad
+    - perro
+    all__word_frequency: 20
+  fr:
+    max_num_sentences: 20
+    num_placeholders: 4
+    num_bullets: 5
+    starter_options:
+    - Je dirais
+    - Ma réponse est
+    - Je crois
+    - D'après moi
+    - Je pense
+    - Selon moi
+    - De mon point de vue
+    - En ce qui me concerne
+    - À mon avis
+    - Il me semble
+    - Pour ma part
+    - Alors
+    - Il apparaît que
+    - Je trouve
+    ending_options:
+    - Je reste à votre disposition pour toute autre question.
+    - D'autres questions ?
+    - Que puis-je faire pour vous ?
+    - Que puis-je faire pour toi ?
+    num_highlighted_sections: 4
+    section_spliter:
+    - Section
+    - SECTION
+    num_sections: 5
+    num_paragraphs: 5
+    postscript_marker:
+    - P.S.
+    - P.P.S
+    - P.-S.
+    - P-S
+    - PS
+    - p.-s.
+    num_keywords: 2
+    keyword_frequency: 3
+    letter_frequency: 10
+    all_capital_word_frequency: 20
+    num_words_lower_limit: 100
+    num_words_upper_limit: 500
+    word_list:
+    - occidental
+    - phrase
+    - signal
+    - château
+    - tache
+    - opposé
+    - bas
+    - pomme de terre
+    - administration
+    - étoile
+    forbidden_char:
+    - ç
+    - œ
+  ja:
+    max_num_sentences: 20
+    num_placeholders: 4
+    num_bullets: 5
+    starter_options:
+    - 私としては、
+    - 私の考えでは、
+    - 私の見解では、
+    - 個人的には、
+    - 私の意見では、
+    - 私見ですが、
+    - 私の観点から言うと、
+    - 私の理解では、
+    - 私の視点から見ると、
+    ending_options:
+    - 他にご質問はありますか？
+    - 他に何かご不明な点はありますか？
+    - 他に何かございますか？
+    - 他にお聞きになりたいことはありますか？
+    num_highlighted_sections: 4
+    section_spliter:
+    - 章
+    - 節
+    - 項
+    num_sections: 5
+    num_paragraphs: 5
+    postscript_marker:
+    - P.S.
+    - P.P.S
+    - 追伸
+    num_keywords: 2
+    keyword_frequency: 3
+    letter_frequency: 10
+    num_letters_lower_limit: 200
+    num_letters_upper_limit: 1000
+    word_list:
+    - 桜
+    - 自転車
+    - 海
+    - 時計
+    - 猫
+    - 本
+    - 雨
+    - 友達
+    - 映画
+    - 音楽
+    kanji_num: 30
+    ending_letters:
+    - です
+    - ます
+    nominal_ending_count: 5
+  pt:
+    max_num_sentences: 20
+    num_placeholders: 4
+    num_bullets: 5
+    starter_options:
+    - Eu diria que
+    - Minha resposta é
+    - Aqui estáAcredito que
+    - Na minha opinião
+    - Eu penso que
+    - Eu creio que
+    - Eu sinto que
+    - Do meu ponto de vista
+    - Como eu vejo
+    - Segundo minha percepção
+    - Pelo que entendo
+    - Ao meu ver
+    - Minha interpretação é
+    - Ele
+    - Ela
+    - Isso
+    - Um
+    - Uma
+    - Para
+    - Por
+    - Então
+    ending_options:
+    - Posso ajudar em algo mais?
+    - Você possui alguma outra dúvida?
+    - Gostaria de tentar de outra forma?
+    num_highlighted_sections: 4
+    section_spliter:
+    - Sessão
+    - SESSÃO
+    num_sections: 5
+    num_paragraphs: 5
+    postscript_marker:
+    - P.S.
+    - Nota
+    - OBS.
+    num_keywords: 2
+    keyword_frequency: 3
+    letter_frequency: 10
+    all_capital_word_frequency: 20
+    num_words_lower_limit: 100
+    num_words_upper_limit: 500
+    word_list:
+    - saudade
+    - amanhã
+    - cidadão
+    - trabalho
+    - escola
+    - saúde
+    - privado
+    - justiça
+    - cultura
+    - verdade
+    cedilla_frequency: 5

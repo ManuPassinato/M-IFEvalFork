@@ -11,3 +11,4 @@ bitsandbytes==0.45.1
 hf-transfer==0.1.9
 openai==1.61.0
 anthropic==0.45.2
+PyYAML==6.0.3

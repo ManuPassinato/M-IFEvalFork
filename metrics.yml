@@ -1,0 +1,90 @@
+# source.config is relative to this file. Other paths are relative to the repo root.
+# Use mode: explicit plus source.io for a fully independent historical campaign.
+source:
+  mode: inference
+  config: inference.yml
+paths:
+  generated_evaluations: experiments/generated_evaluations
+  # null follows generated_evaluations; set a path only for a historical campaign.
+  report_evaluations: null
+  report_output_dir: .
+run_eval_only:
+  languages_choices:
+  - pt
+  - pten
+  languages_default:
+  - pt
+  - pten
+  legacy_prefix: pt_en
+evaluation_main:
+  strict_filename: eval_results_strict.jsonl
+  loose_filename: eval_results_loose.jsonl
+  divider_width: 64
+calc_eval:
+  score_decimals: 2
+  model_width: 65
+  prompt_width: 7
+  score_width: 8
+  separator_width: 103
+tables:
+  seaborn_theme: whitegrid
+  leaderboard_size:
+  - 12
+  - 6
+  leaderboard_palette: Blues_d
+  title_font_size: 14
+  x_axis_alignment: right
+  pie_size:
+  - 10
+  - 8
+  pie_percentage_format: '%1.1f%%'
+  pie_start_angle: 140
+  pie_percentage_distance: 0.85
+  category_size:
+  - 14
+  - 7
+  strict_palette: viridis
+  legend_bbox:
+  - 1.01
+  - 1
+  legend_location: upper left
+  loose_palette: rocket
+  center_color: white
+  dataframe_max_column_width: 100
+  prompt_strict_csv: table_1_prompt_strict.csv
+  instruction_strict_csv: table_2_instruction_strict.csv
+  instruction_loose_csv: table_6_instruction_loose.csv
+  prompt_loose_csv: table_7_prompt_loose.csv
+  y_axis_min: 0
+  y_axis_max: 100
+  output_leaderboard: leaderboard_{language}.png
+  detailed_instructions_csv: table_8_detailed_instructions.csv
+  output_pie_distribution: pie_distribution_{language}.png
+  output_category_strict: category_strict_{language}.png
+  output_category_loose: category_loose_{language}.png
+  detailed_row_limit: 10
+  font_size: 12
+  float_format: '{:.1f}'
+  maximum_model_length: 30
+  truncated_model_length: 27
+  model_suffix: '...'
+  center_radius: 0.7
+  constructor_language: en
+  target_language: pt
+  accepted_extensions:
+  - .jsonl
+  - .json
+  x_axis_rotation: 45
+  removable_model_tokens:
+  - _results
+  - results_
+nlp:
+  spanish_model: es_core_news_sm
+  multilingual_sentence_model: xx_sent_ud_sm
+  portuguese_model: pt_core_news_sm
+  portuguese_disable:
+  - tagger
+  - parser
+  - ner
+  sentence_component: sentencizer
+  nltk_resource: punkt_tab

@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from config import load_config, project_path, config_path
+CONFIG = load_config('metrics')
+CFG = CONFIG['run_eval_only']
+IO = CONFIG["io"]
+
+
 import argparse
 import json
 import subprocess
@@ -10,12 +16,12 @@ from pathlib import Path
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
-DEFAULT_RESPONSES_DIR = PROJECT_DIR / "experiments" / "generated_responses"
-DEFAULT_EVALUATIONS_DIR = PROJECT_DIR / "experiments" / "generated_evaluations"
-DEFAULT_PT_INPUT = PROJECT_DIR / "data" / "pt_input_data.jsonl"
-DEFAULT_PTEN_INPUT = PROJECT_DIR / "experiments" / "data_close" / "pten_input_data.jsonl"
+DEFAULT_RESPONSES_DIR = project_path(IO["responses_dir"])
+DEFAULT_EVALUATIONS_DIR = project_path(CONFIG["paths"]["generated_evaluations"])
+DEFAULT_PT_INPUT = project_path(IO["input_files"]["pt"])
+DEFAULT_PTEN_INPUT = project_path(IO["input_files"]["pten"])
 
-LANGUAGE_ALIASES = {"pt": "pt", "pten": "pten", "pt_en": "pten"}
+LANGUAGE_ALIASES = IO["language_aliases"]
 
 
 def discover_response_files(responses_dir: Path) -> list[Path]:
@@ -24,12 +30,12 @@ def discover_response_files(responses_dir: Path) -> list[Path]:
     return sorted(
         path
         for path in responses_dir.iterdir()
-        if path.is_file() and path.suffix == ".jsonl" and "_input_response_data_" in path.name
+        if path.is_file() and path.suffix == IO["response_extension"] and IO["response_marker"] in path.name
     )
 
 
 def parse_language_and_model(path: Path) -> tuple[str | None, str | None]:
-    prefix, marker, model_name = path.stem.partition("_input_response_data_")
+    prefix, marker, model_name = path.stem.partition(IO["response_marker"])
     if not marker or not model_name:
         return None, None
     return LANGUAGE_ALIASES.get(prefix), model_name
@@ -66,6 +72,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Evaluate PT and PTEN response files stored in one directory."
     )
+    parser.add_argument("--config", help="Stage YAML configuration file.")
+    parser.add_argument("--inference-config", type=Path, help="Override metrics.source.config for this inference run.")
     parser.add_argument("--project-dir", type=Path, default=PROJECT_DIR)
     parser.add_argument(
         "--responses-dir",
@@ -82,8 +90,8 @@ def main() -> None:
     parser.add_argument(
         "--languages",
         nargs="+",
-        choices=("pt", "pten"),
-        default=("pt", "pten"),
+        choices=CFG['languages_choices'],
+        default=CFG['languages_default'],
         help="Languages to evaluate (default: pt pten).",
     )
     parser.add_argument(
@@ -130,6 +138,7 @@ def main() -> None:
             command = [
                 sys.executable,
                 str(eval_script),
+                "--config", str(config_path("metrics")),
                 "--input_data",
                 str(input_data),
                 "--input_response_data",
@@ -137,6 +146,8 @@ def main() -> None:
                 "--output_dir",
                 str(output_dir),
             ]
+            if args.inference_config is not None:
+                command.extend(["--inference-config", str(args.inference_config.resolve())])
             print(
                 f"{language.upper()} | {model_name} | {prompt_count} prompts | "
                 f"{response_path.name}"
@@ -147,7 +158,7 @@ def main() -> None:
             print(f"OK: {response_path.name}")
         except (OSError, ValueError, subprocess.CalledProcessError) as error:
             message = str(error)
-            if response_path.name.startswith("pt_en_input_response_data_"):
+            if response_path.name.startswith(CFG["legacy_prefix"] + IO["response_marker"]):
                 message += " Use --pten-input-data with the matching legacy input dataset."
             failures.append((response_path, message))
             print(f"FAIL: {response_path.name}: {message}")
